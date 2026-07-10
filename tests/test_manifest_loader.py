@@ -108,11 +108,11 @@ def test_build_runtime_config_resolves_cra40_profile_variables_from_mapping(
                 "    end_section: 4",
                 "inputs:",
                 "  rh:",
-                "    logical_name: placeholder-rh.grib2",
+                "    logical_name: CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
                 "  temp:",
-                "    logical_name: placeholder-temp.grib2",
+                "    logical_name: CRA40_TEM_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
                 "  w:",
-                "    logical_name: placeholder-w.grib2",
+                "    logical_name: CRA40_VVP_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
             ]
         ),
         encoding="utf-8",
@@ -129,6 +129,184 @@ def test_build_runtime_config_resolves_cra40_profile_variables_from_mapping(
     assert cfg.resolved_inputs["w"].endswith(
         "CRA40_VVP_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
     )
+
+
+def test_build_runtime_config_rejects_front1_profile_mapping_without_logical_name(
+    tmp_path,
+):
+    manifest_path = tmp_path / "case.yml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "case_name: cra40_front1_missing_logical_name",
+                "dataset: cra40",
+                "front_id: front1",
+                "target_time: 2017-06-22T18",
+                "steps:",
+                "  inventory: true",
+                "  masks: true",
+                "  geometry: true",
+                "  profiles: true",
+                "  subareas: true",
+                "  statistics: true",
+                "params:",
+                "  geometry:",
+                "    degree: 4",
+                "    dense_points: 1000",
+                "    n_sections: 8",
+                "    distance: 1.0",
+                "    n_points: 9",
+                "    delta_x: 0.1",
+                "  profiles:",
+                "    variables:",
+                "      - temp",
+                "  subareas:",
+                "    start_section: 1",
+                "    end_section: 4",
+                "inputs:",
+                "  temp:",
+                "    logical_name:",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires explicit logical_name"):
+        build_runtime_config(manifest_path)
+
+
+def test_build_runtime_config_rejects_front1_profile_mapping_with_wrong_logical_name(
+    tmp_path,
+):
+    manifest_path = tmp_path / "case.yml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "case_name: cra40_front1_wrong_logical_name",
+                "dataset: cra40",
+                "front_id: front1",
+                "target_time: 2017-06-22T18",
+                "steps:",
+                "  inventory: true",
+                "  masks: true",
+                "  geometry: true",
+                "  profiles: true",
+                "  subareas: true",
+                "  statistics: true",
+                "params:",
+                "  geometry:",
+                "    degree: 4",
+                "    dense_points: 1000",
+                "    n_sections: 8",
+                "    distance: 1.0",
+                "    n_points: 9",
+                "    delta_x: 0.1",
+                "  profiles:",
+                "    variables:",
+                "      - w",
+                "  subareas:",
+                "    start_section: 1",
+                "    end_section: 4",
+                "inputs:",
+                "  w:",
+                "    logical_name: CRA40_VVEL_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="logical_name mismatch"):
+        build_runtime_config(manifest_path)
+
+
+def test_build_runtime_config_does_not_apply_front1_mapping_to_other_fronts(
+    tmp_path,
+):
+    manifest_path = tmp_path / "case.yml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "case_name: cra40_front2_temp_manifest",
+                "dataset: cra40",
+                "front_id: front2",
+                "target_time: 2017-06-22T18",
+                "steps:",
+                "  inventory: true",
+                "  masks: true",
+                "  geometry: true",
+                "  profiles: true",
+                "  subareas: true",
+                "  statistics: true",
+                "params:",
+                "  geometry:",
+                "    degree: 4",
+                "    dense_points: 1000",
+                "    n_sections: 8",
+                "    distance: 1.0",
+                "    n_points: 9",
+                "    delta_x: 0.1",
+                "  profiles:",
+                "    variables:",
+                "      - temp",
+                "  subareas:",
+                "    start_section: 1",
+                "    end_section: 4",
+                "inputs:",
+                "  temp:",
+                "    logical_name: CRA40_TEMP_FRONT2_CUSTOM.grib2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = build_runtime_config(manifest_path)
+
+    assert cfg.resolved_inputs["temp"].endswith("CRA40_TEMP_FRONT2_CUSTOM.grib2")
+
+
+def test_build_runtime_config_does_not_apply_front1_mapping_to_other_times(
+    tmp_path,
+):
+    manifest_path = tmp_path / "case.yml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "case_name: cra40_front1_other_time_manifest",
+                "dataset: cra40",
+                "front_id: front1",
+                "target_time: 2017-06-22T12",
+                "steps:",
+                "  inventory: true",
+                "  masks: true",
+                "  geometry: true",
+                "  profiles: true",
+                "  subareas: true",
+                "  statistics: true",
+                "params:",
+                "  geometry:",
+                "    degree: 4",
+                "    dense_points: 1000",
+                "    n_sections: 8",
+                "    distance: 1.0",
+                "    n_points: 9",
+                "    delta_x: 0.1",
+                "  profiles:",
+                "    variables:",
+                "      - w",
+                "  subareas:",
+                "    start_section: 1",
+                "    end_section: 4",
+                "inputs:",
+                "  w:",
+                "    logical_name: CRA40_W_OTHER_TIME_CUSTOM.grib2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = build_runtime_config(manifest_path)
+
+    assert cfg.resolved_inputs["w"].endswith("CRA40_W_OTHER_TIME_CUSTOM.grib2")
 
 
 def test_build_runtime_config_prefers_relative_input_path(tmp_path):

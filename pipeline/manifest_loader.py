@@ -74,7 +74,13 @@ def build_runtime_config(
     data = _manifest_to_mutable_dict(manifest)
     _apply_overrides(data, overrides or {})
     resolved_inputs = {
-        key: _resolve_input_path(data["dataset"], key, ref)
+        key: _resolve_input_path(
+            data["dataset"],
+            data["front_id"],
+            data["target_time"],
+            key,
+            ref,
+        )
         for key, ref in manifest.inputs.items()
     }
     return RunnerRuntimeConfig(
@@ -139,16 +145,46 @@ def _apply_overrides(data: dict[str, Any], overrides: dict[str, object]) -> None
         cursor[parts[-1]] = value
 
 
-def _resolve_input_path(dataset: str, key: str, ref: ManifestInputRef) -> str:
+def _is_front1_v1_profile_mapping_case(
+    dataset: str,
+    front_id: str,
+    target_time: str,
+    key: str,
+) -> bool:
+    return (
+        dataset == "cra40"
+        and front_id == "front1"
+        and target_time == "2017-06-22T18"
+        and key in CRA40_PROFILE_SPECS
+    )
+
+
+def _resolve_input_path(
+    dataset: str,
+    front_id: str,
+    target_time: str,
+    key: str,
+    ref: ManifestInputRef,
+) -> str:
     if ref.relative_path:
         return str((PROJECT_ROOT / ref.relative_path).resolve())
-    if dataset == "cra40" and key in CRA40_PROFILE_SPECS:
+
+    if _is_front1_v1_profile_mapping_case(dataset, front_id, target_time, key):
+        expected_logical_name = CRA40_PROFILE_SPECS[key]["filename"]
+        if not ref.logical_name:
+            raise ValueError(
+                f"front1 V1 CRA40 profile variable '{key}' requires explicit logical_name"
+            )
+        if ref.logical_name != expected_logical_name:
+            raise ValueError(
+                f"front1 V1 CRA40 profile variable '{key}' logical_name mismatch: "
+                f"expected {expected_logical_name}, got {ref.logical_name}"
+            )
         return str(resolve_cra40_profile_input(key))
+
     if ref.logical_name:
         if dataset != "cra40":
             raise ValueError(f"unsupported dataset for logical_name: {dataset}")
-        if key in CRA40_PROFILE_SPECS:
-            return str(resolve_cra40_profile_input(key))
         return cra40_file(ref.logical_name)
     raise ValueError("input reference must define relative_path or logical_name")
 
