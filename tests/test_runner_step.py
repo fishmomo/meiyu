@@ -31,6 +31,7 @@ class RunnerStepTest(unittest.TestCase):
             summary["statistics"]["variables"]["rh"]["front_mean"],
             85.81288001650856,
         )
+        self.assertIn("subarea_mean", summary["statistics"]["variables"]["rh"])
         self.assertEqual(summary["statistics"]["status"], "completed")
 
     def test_run_case_from_front1_manifest_returns_multivariable_summary(self) -> None:
@@ -46,6 +47,8 @@ class RunnerStepTest(unittest.TestCase):
             set(summary["profiles"]["variables"].keys()),
             {"rh", "temp", "w"},
         )
+        for variable in ("rh", "temp", "w"):
+            self.assertIn("subarea_mean", summary["statistics"]["variables"][variable])
         self.assertEqual(summary["statistics"]["status"], "completed")
 
     def test_run_case_returns_summary_from_pipeline_config(self) -> None:
@@ -73,6 +76,7 @@ class RunnerStepTest(unittest.TestCase):
             summary["statistics"]["variables"]["rh"]["front_mean"],
             85.81288001650856,
         )
+        self.assertIn("subarea_mean", summary["statistics"]["variables"]["rh"])
 
     def test_run_case_from_manifest_applies_geometry_override(self) -> None:
         summary = self._run_manifest(

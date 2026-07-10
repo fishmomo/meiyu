@@ -293,6 +293,11 @@ def run_case(cfg) -> dict[str, object]:
                 "front_mean": float(build_masked_mean(variable, field3d[0], mask_bool)),
             }
         if subareas_enabled:
+            for variable in profile_variables:
+                field3d, _ = field_cache[variable]
+                statistics_by_variable[variable]["subarea_mean"] = float(
+                    build_masked_mean(variable, field3d[0], submask)
+                )
             statistics_summary = _completed_statistics_summary(statistics_by_variable)
         else:
             for variable_summary in statistics_by_variable.values():
