@@ -1,5 +1,7 @@
 import unittest
 import json
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -275,6 +277,27 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("ERROR:", stderr.getvalue())
         self.assertIn("verified CRA40 front2 2017-06-22T18 rh", stderr.getvalue())
+
+    def test_runner_module_entrypoint_executes_manifest(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pipeline.runner",
+                "--manifest",
+                "manifests/cases/cra40_front2_20170622T18.yml",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path("."),
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["case_name"], "cra40_front2_20170622T18")
+        self.assertEqual(payload["statistics"]["status"], "completed")
 
 
 if __name__ == "__main__":

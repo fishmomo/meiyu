@@ -167,10 +167,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def run_case(cfg) -> dict[str, object]:
     _validate_supported_case(cfg)
     profile_variable = _validate_supported_profile_variable(cfg)
@@ -280,3 +276,7 @@ def run_case(cfg) -> dict[str, object]:
         "subareas": subareas_summary,
         "statistics": statistics_summary,
     }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
