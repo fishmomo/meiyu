@@ -53,7 +53,8 @@ conda run -n cwr_py312 python -c "from pathlib import Path; from pipeline.runner
 
 1. [快速使用指南](docs/pipeline_quickstart_zh.md)
 2. [技术架构与旧工程映射](docs/pipeline_architecture_mapping_zh.md)
-3. [旧工程冒烟状态记录](docs/legacy_project_smoke_status_2026-07-05.md)
+3. [旧脚本功能总表](docs/legacy_script_index_zh.md)
+4. [旧工程冒烟状态记录](docs/legacy_project_smoke_status_2026-07-05.md)
 
 ## 数据说明
 
