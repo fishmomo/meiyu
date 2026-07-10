@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.manifest_loader import build_runtime_config
 from pipeline.manifest_loader import load_manifest
 from pipeline.config import load_case_config
@@ -51,6 +52,82 @@ def test_build_runtime_config_resolves_logical_input_name():
     )
     assert cfg.resolved_inputs["rh"].endswith(
         "CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+
+
+def test_resolve_cra40_profile_input_supports_front1_v1_variables():
+    assert str(resolve_cra40_profile_input("rh")).endswith(
+        "CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+    assert str(resolve_cra40_profile_input("temp")).endswith(
+        "CRA40_TEM_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+    assert str(resolve_cra40_profile_input("w")).endswith(
+        "CRA40_VVP_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+
+
+def test_resolve_cra40_profile_input_rejects_unknown_variable():
+    with pytest.raises(ValueError, match="unsupported CRA40 profile variable"):
+        resolve_cra40_profile_input("thetae")
+
+
+def test_build_runtime_config_resolves_cra40_profile_variables_from_mapping(
+    tmp_path,
+):
+    manifest_path = tmp_path / "case.yml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "case_name: cra40_front1_manifest",
+                "dataset: cra40",
+                "front_id: front1",
+                "target_time: 2017-06-22T18",
+                "steps:",
+                "  inventory: true",
+                "  masks: true",
+                "  geometry: true",
+                "  profiles: true",
+                "  subareas: true",
+                "  statistics: true",
+                "params:",
+                "  geometry:",
+                "    degree: 4",
+                "    dense_points: 1000",
+                "    n_sections: 8",
+                "    distance: 1.0",
+                "    n_points: 9",
+                "    delta_x: 0.1",
+                "  profiles:",
+                "    variables:",
+                "      - rh",
+                "      - temp",
+                "      - w",
+                "  subareas:",
+                "    start_section: 1",
+                "    end_section: 4",
+                "inputs:",
+                "  rh:",
+                "    logical_name: placeholder-rh.grib2",
+                "  temp:",
+                "    logical_name: placeholder-temp.grib2",
+                "  w:",
+                "    logical_name: placeholder-w.grib2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = build_runtime_config(manifest_path)
+
+    assert cfg.resolved_inputs["rh"].endswith(
+        "CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+    assert cfg.resolved_inputs["temp"].endswith(
+        "CRA40_TEM_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
+    assert cfg.resolved_inputs["w"].endswith(
+        "CRA40_VVP_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"
     )
 
 

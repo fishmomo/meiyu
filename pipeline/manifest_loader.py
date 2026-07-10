@@ -4,6 +4,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from pipeline.core.cra40_fields import CRA40_PROFILE_SPECS
+from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.manifest_models import (
     ManifestGeometryParams,
     ManifestInputRef,
@@ -72,7 +74,7 @@ def build_runtime_config(
     data = _manifest_to_mutable_dict(manifest)
     _apply_overrides(data, overrides or {})
     resolved_inputs = {
-        key: _resolve_input_path(data["dataset"], ref)
+        key: _resolve_input_path(data["dataset"], key, ref)
         for key, ref in manifest.inputs.items()
     }
     return RunnerRuntimeConfig(
@@ -137,12 +139,16 @@ def _apply_overrides(data: dict[str, Any], overrides: dict[str, object]) -> None
         cursor[parts[-1]] = value
 
 
-def _resolve_input_path(dataset: str, ref: ManifestInputRef) -> str:
+def _resolve_input_path(dataset: str, key: str, ref: ManifestInputRef) -> str:
     if ref.relative_path:
         return str((PROJECT_ROOT / ref.relative_path).resolve())
+    if dataset == "cra40" and key in CRA40_PROFILE_SPECS:
+        return str(resolve_cra40_profile_input(key))
     if ref.logical_name:
         if dataset != "cra40":
             raise ValueError(f"unsupported dataset for logical_name: {dataset}")
+        if key in CRA40_PROFILE_SPECS:
+            return str(resolve_cra40_profile_input(key))
         return cra40_file(ref.logical_name)
     raise ValueError("input reference must define relative_path or logical_name")
 

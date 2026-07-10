@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -105,6 +107,57 @@ class ProfilesStepTest(unittest.TestCase):
         stacked = stack_profiles([arr1, arr2])
 
         self.assertEqual(stacked.shape, (2, 5, 4))
+
+    def test_read_cra40_profile_cube_uses_mapped_field_and_level(self) -> None:
+        from pipeline.core.cra40_fields import read_cra40_profile_cube
+
+        lats = np.array([30.0, 31.0])
+        lons = np.array([100.0, 101.0])
+        levels = np.arange(40, dtype=float)
+        field = np.arange(40 * 2 * 2, dtype=float).reshape(40, 2, 2)
+
+        class FakeArray:
+            def __init__(self, values, recorder=None):
+                self.values = values
+                self.recorder = recorder if recorder is not None else self
+
+            def isel(self, indexers):
+                (_, selector), = indexers.items()
+                return FakeArray(self.values[selector], recorder=self.recorder)
+
+            def sel(self, **kwargs):
+                self.recorder.last_sel = kwargs
+                return self
+
+        class FakeDataset:
+            def __init__(self):
+                self.arrays = {
+                    "t": FakeArray(field),
+                    "isobaricInhPa": FakeArray(levels),
+                }
+
+            def __getitem__(self, key):
+                return self.arrays[key]
+
+        fake_ds = FakeDataset()
+
+        with patch(
+            "pipeline.core.cra40_fields.open_dataset_compat",
+            return_value=fake_ds,
+        ):
+            cube, resolved_levels = read_cra40_profile_cube(
+                "temp",
+                Path("dummy.grib2"),
+                lats,
+                lons,
+            )
+
+        np.testing.assert_array_equal(cube, field[:37])
+        np.testing.assert_array_equal(resolved_levels, levels[:37])
+        self.assertEqual(
+            fake_ds.arrays["t"].last_sel,
+            {"latitude": lats, "longitude": lons, "method": "nearest"},
+        )
 
 
 if __name__ == "__main__":
