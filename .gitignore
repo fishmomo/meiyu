@@ -5,14 +5,20 @@ outputs/
 # Python caches and test artifacts
 __pycache__/
 .pytest_cache/
+.ipynb_checkpoints/
 *.pyc
 *.pyo
 *.pyd
+*.log
 
 # Local agent/runtime scratch
 .agents/
 .superpowers/
 .tmp/
+
+# Editor metadata
+.vscode/
+.idea/
 
 # OS/editor noise
 .DS_Store
