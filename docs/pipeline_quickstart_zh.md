@@ -108,6 +108,28 @@ ds = xr.open_dataset("data/interim/manual_masks/cra40/front2/2017-06-22T18.nc")
 
 ## 4. 最小可运行示例
 
+### 命令行运行
+
+如果你已经有可用的 `cwr_py312` 环境，也可以直接从终端跑当前这条已验证链路。CLI 的真实入口是 `python -m pipeline.runner --manifest <path> [--override key=value]`，下面给 3 个最小例子：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml
+```
+
+关闭 `subareas`，但保留 `statistics`：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml --override steps.subareas=false --override steps.statistics=true
+```
+
+改几何切分数：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml --override params.geometry.n_sections=6
+```
+
+这条命令会输出 JSON，里面包含 `case_name`、`geometry`、`profiles`、`subareas` 和 `statistics` 等摘要字段。IDE 里如果想逐步看中间对象，继续用下面的 Python 方式最方便。
+
 下面给出一条当前项目内已经真实验证过的最小链路。建议先按这个案例跑通，再扩展到其他时次、其他变量、其他锋面。
 
 ### 4.1 第一步：读取配置并检查基础入口
@@ -477,3 +499,4 @@ outputs/
 ## 7. 一句话总结
 
 当前这版新流水线已经适合做“项目内、真实数据、按步骤复用”的研究入口。最稳妥的使用方式，是先围绕 `CRA40 front2 2017-06-22T18` 跑通 `mask -> geometry -> profiles -> subareas -> statistics`，确认你理解了每一步输入输出，再逐步扩展到更多个例。
+
