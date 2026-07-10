@@ -29,6 +29,16 @@ ALLOWED_OVERRIDE_KEYS = {
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _normalize_profile_variables(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    return list(value)  # type: ignore[arg-type]
+
+
 def load_manifest(path: Path) -> ManifestSpec:
     parsed = _parse_manifest_yaml(path)
     return ManifestSpec(
@@ -39,7 +49,9 @@ def load_manifest(path: Path) -> ManifestSpec:
         steps={key: bool(value) for key, value in parsed["steps"].items()},
         geometry=ManifestGeometryParams(**parsed["params"]["geometry"]),
         profiles=ManifestProfilesParams(
-            variables=list(parsed["params"]["profiles"]["variables"])
+            variables=_normalize_profile_variables(
+                parsed["params"]["profiles"]["variables"]
+            )
         ),
         subareas=ManifestSubareasParams(**parsed["params"]["subareas"]),
         inputs={
@@ -71,7 +83,9 @@ def build_runtime_config(
         steps={key: bool(value) for key, value in data["steps"].items()},
         geometry=ManifestGeometryParams(**data["params"]["geometry"]),
         profiles=ManifestProfilesParams(
-            variables=list(data["params"]["profiles"]["variables"])
+            variables=_normalize_profile_variables(
+                data["params"]["profiles"]["variables"]
+            )
         ),
         subareas=ManifestSubareasParams(**data["params"]["subareas"]),
         resolved_inputs=resolved_inputs,

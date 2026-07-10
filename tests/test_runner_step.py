@@ -1,5 +1,7 @@
 import unittest
+import json
 from pathlib import Path
+from unittest.mock import patch
 
 
 class RunnerStepTest(unittest.TestCase):
@@ -133,6 +135,146 @@ class RunnerStepTest(unittest.TestCase):
                     "runner only supports the verified CRA40 front2 2017-06-22T18 pipeline in this version",
                 ):
                     run_case(cfg)
+
+    def test_runner_main_returns_zero_and_prints_json_for_manifest(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        fake_summary = {
+            "case_name": "验证用例",
+            "statistics": {"status": "completed"},
+        }
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(runner, "run_case_from_manifest", return_value=fake_summary):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = runner.main(
+                    [
+                        "--manifest",
+                        "manifests/cases/cra40_front2_20170622T18.yml",
+                    ]
+                )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["case_name"], "验证用例")
+        self.assertEqual(payload["statistics"]["status"], "completed")
+        self.assertNotIn("\\u9a8c\\u8bc1", stdout.getvalue())
+
+    def test_runner_main_applies_cli_overrides(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(runner, "run_case_from_manifest", return_value={"case_name": "验证用例"} ) as mocked:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = runner.main(
+                    [
+                        "--manifest",
+                        "manifests/cases/cra40_front2_20170622T18.yml",
+                        "--override",
+                        "steps.subareas=false",
+                        "--override",
+                        "steps.statistics=true",
+                        "--override",
+                        "params.geometry.n_sections=6",
+                        "--override",
+                        "params.geometry.scale=1.5",
+                        "--override",
+                        "params.profiles.variables=rh",
+                    ]
+                )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["case_name"], "验证用例")
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(
+            kwargs["overrides"],
+            {
+                "steps.subareas": False,
+                "steps.statistics": True,
+                "params.geometry.n_sections": 6,
+                "params.geometry.scale": 1.5,
+                "params.profiles.variables": "rh",
+            },
+        )
+
+    def test_runner_main_returns_one_for_bad_override_pair(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(runner, "run_case_from_manifest") as mocked:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = runner.main(
+                    [
+                        "--manifest",
+                        "manifests/cases/cra40_front2_20170622T18.yml",
+                        "--override",
+                        "badpair",
+                    ]
+                )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("ERROR:", stderr.getvalue())
+
+    def test_runner_main_returns_one_for_missing_manifest(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = runner.main([])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("ERROR:", stderr.getvalue())
+
+    def test_runner_main_returns_one_for_unsupported_cli_case(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with patch.object(
+            runner,
+            "run_case_from_manifest",
+            side_effect=ValueError(
+                "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version"
+            ),
+        ):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = runner.main(
+                    [
+                        "--manifest",
+                        "manifests/cases/cra40_front2_20170622T18.yml",
+                        "--override",
+                        "params.profiles.variables=temp",
+                    ]
+                )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("ERROR:", stderr.getvalue())
+        self.assertIn("verified CRA40 front2 2017-06-22T18 rh", stderr.getvalue())
 
 
 if __name__ == "__main__":

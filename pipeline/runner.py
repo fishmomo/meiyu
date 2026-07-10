@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
 
 import numpy as np
 
@@ -136,30 +135,29 @@ def _parse_override_pairs(pairs: list[str] | None) -> dict[str, object]:
     return overrides
 
 
+class _CliArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise ValueError(message)
+
+    def exit(self, status: int = 0, message: str | None = None) -> None:
+        if message:
+            raise ValueError(message.strip())
+        raise ValueError(f"argument parsing failed with status {status}")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Run the verified Meiyu pipeline case",
-    )
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--override", action="append", default=[])
-    args = parser.parse_args(argv)
-
     try:
+        parser = _CliArgumentParser(
+            description="Run the verified Meiyu pipeline case",
+        )
+        parser.add_argument("--manifest", required=True)
+        parser.add_argument("--override", action="append", default=[])
+        args = parser.parse_args(argv)
+
         overrides = _parse_override_pairs(args.override)
-        profile_override = overrides.get("params.profiles.variables")
-        if profile_override is not None and profile_override != "rh":
-            raise ValueError(
-                "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version"
-            )
-
-        runtime_overrides = overrides
-        if profile_override == "rh" and not isinstance(run_case_from_manifest, Mock):
-            runtime_overrides = dict(overrides)
-            runtime_overrides["params.profiles.variables"] = ["rh"]
-
         summary = run_case_from_manifest(
             Path(args.manifest),
-            overrides=runtime_overrides,
+            overrides=overrides,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
