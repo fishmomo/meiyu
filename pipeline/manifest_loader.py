@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline.core.cra40_fields import CRA40_PROFILE_SPECS
+from pipeline.core.cra40_fields import build_cra40_filename
 from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.manifest_models import (
     ManifestGeometryParams,
@@ -145,16 +146,14 @@ def _apply_overrides(data: dict[str, Any], overrides: dict[str, object]) -> None
         cursor[parts[-1]] = value
 
 
-def _is_front1_v1_profile_mapping_case(
+def _is_front1_profile_mapping_case(
     dataset: str,
     front_id: str,
-    target_time: str,
     key: str,
 ) -> bool:
     return (
         dataset == "cra40"
         and front_id == "front1"
-        and target_time == "2017-06-22T18"
         and key in CRA40_PROFILE_SPECS
     )
 
@@ -169,18 +168,18 @@ def _resolve_input_path(
     if ref.relative_path:
         return str((PROJECT_ROOT / ref.relative_path).resolve())
 
-    if _is_front1_v1_profile_mapping_case(dataset, front_id, target_time, key):
-        expected_logical_name = CRA40_PROFILE_SPECS[key]["filename"]
+    if _is_front1_profile_mapping_case(dataset, front_id, key):
+        expected_logical_name = build_cra40_filename(key, target_time)
         if not ref.logical_name:
             raise ValueError(
-                f"front1 V1 CRA40 profile variable '{key}' requires explicit logical_name"
+                f"front1 CRA40 profile variable '{key}' requires explicit logical_name"
             )
         if ref.logical_name != expected_logical_name:
             raise ValueError(
-                f"front1 V1 CRA40 profile variable '{key}' logical_name mismatch: "
+                f"front1 CRA40 profile variable '{key}' logical_name mismatch: "
                 f"expected {expected_logical_name}, got {ref.logical_name}"
             )
-        return str(resolve_cra40_profile_input(key))
+        return str(resolve_cra40_profile_input(key, target_time))
 
     if ref.logical_name:
         if dataset != "cra40":

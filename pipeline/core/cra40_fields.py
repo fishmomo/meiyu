@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -11,17 +12,17 @@ from project_paths import cra40_file
 
 CRA40_PROFILE_SPECS: Final[dict[str, dict[str, str]]] = {
     "rh": {
-        "filename": "CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
+        "prefix": "CRA40_RHU",
         "field": "r",
         "level": "isobaricInhPa",
     },
     "temp": {
-        "filename": "CRA40_TEM_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
+        "prefix": "CRA40_TEM",
         "field": "t",
         "level": "isobaricInhPa",
     },
     "w": {
-        "filename": "CRA40_VVP_2017062218_GLB_0P25_HOUR_V1_0_0.grib2",
+        "prefix": "CRA40_VVP",
         "field": "w",
         "level": "isobaricInhPa",
     },
@@ -37,9 +38,20 @@ def _get_cra40_profile_spec(variable: str) -> dict[str, str]:
         ) from exc
 
 
-def resolve_cra40_profile_input(variable: str) -> Path:
+def _cra40_time_token(target_time: str) -> str:
+    return datetime.strptime(target_time, "%Y-%m-%dT%H").strftime("%Y%m%d%H")
+
+
+def build_cra40_filename(variable: str, target_time: str) -> str:
     spec = _get_cra40_profile_spec(variable)
-    return Path(cra40_file(spec["filename"]))
+    token = _cra40_time_token(target_time)
+    return f"{spec['prefix']}_{token}_GLB_0P25_HOUR_V1_0_0.grib2"
+
+
+def resolve_cra40_profile_input(variable: str, target_time: str = "2017-06-22T18") -> Path:
+    spec = _get_cra40_profile_spec(variable)
+    filename = build_cra40_filename(variable, target_time)
+    return Path(cra40_file(filename))
 
 
 def read_cra40_profile_cube(

@@ -46,12 +46,25 @@ class MaskStepTest(unittest.TestCase):
 
         self.assertEqual(str(ctx.exception), missing_path)
 
-    def test_front1_rejects_non_v1_target_time_even_if_files_exist(self) -> None:
+    def test_resolve_existing_cra40_front1_assets_for_other_time(self) -> None:
         from pipeline.steps.masks import resolve_case_masks
 
-        with patch("pathlib.Path.exists", return_value=True):
-            with self.assertRaisesRegex(ValueError, "2017-06-22T18"):
-                resolve_case_masks("front1", "2017-06-22T00")
+        assets = resolve_case_masks("front1", "2017-06-22T12")
+        self.assertIn("front_mask", assets)
+        self.assertIn("extend_mask", assets)
+        self.assertTrue(assets["front_mask"].endswith("front1\\2017-06-22T12.nc"))
+        self.assertTrue(Path(assets["front_mask"]).exists())
+        self.assertTrue(Path(assets["extend_mask"]).exists())
+
+    def test_front2_assets_without_subarea_mask_when_file_missing(self) -> None:
+        from pipeline.steps.masks import resolve_case_masks
+
+        assets = resolve_case_masks("front2", "2017-06-23T00")
+        self.assertIn("front_mask", assets)
+        self.assertIn("extend_mask", assets)
+        self.assertNotIn("subarea_mask", assets)
+        self.assertTrue(Path(assets["front_mask"]).exists())
+        self.assertTrue(Path(assets["extend_mask"]).exists())
 
 
 if __name__ == "__main__":

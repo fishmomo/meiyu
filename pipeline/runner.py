@@ -23,29 +23,32 @@ from pipeline.steps.subareas import build_subarea_mask
 
 
 def _validate_supported_case(cfg) -> None:
-    case_key = (cfg.dataset, cfg.front_id, cfg.target_time)
-    if case_key == ("cra40", "front2", "2017-06-22T18"):
-        return
-    if (
-        case_key == ("cra40", "front1", "2017-06-22T18")
-        and getattr(cfg, "resolved_inputs", None) is not None
-        and getattr(cfg, "profiles", None) is not None
-    ):
-        return
-    raise ValueError(
-        "runner only supports the verified CRA40 front1/front2 2017-06-22T18 pipeline in this version"
-    )
+    if cfg.dataset != "cra40":
+        raise ValueError("runner only supports CRA40 dataset in this version")
+    if cfg.front_id not in ("front1", "front2"):
+        raise ValueError("runner only supports front1/front2 in this version")
+    try:
+        masks = resolve_case_masks(cfg.front_id, cfg.target_time)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(
+            f"no mask assets found for {cfg.front_id} at {cfg.target_time}: {exc}"
+        ) from exc
+    if not masks:
+        raise ValueError(f"no mask assets found for {cfg.front_id} at {cfg.target_time}")
+    profile_variables = _get_profile_variables(cfg)
+    if cfg.front_id == "front2" and "rh" not in profile_variables:
+        raise ValueError("front2 requires at least 'rh' profile variable")
+    if cfg.front_id == "front1" and not set(profile_variables).issubset({"rh", "temp", "w"}):
+        raise ValueError("front1 only supports rh/temp/w profile variables")
 
 
 def _validate_supported_profile_variables(cfg: Any) -> list[str]:
     variables = _get_profile_variables(cfg)
-    if cfg.front_id == "front2" and variables == ["rh"]:
-        return variables
-    if cfg.front_id == "front1" and set(variables).issubset({"rh", "temp", "w"}):
-        return variables
-    raise ValueError(
-        "runner only supports the verified CRA40 front2 rh pipeline and CRA40 front1 rh/temp/w profile variables in this version"
-    )
+    if cfg.front_id == "front2" and "rh" not in variables:
+        raise ValueError("front2 runner requires at least 'rh' profile variable")
+    if cfg.front_id == "front1" and not set(variables).issubset({"rh", "temp", "w"}):
+        raise ValueError("front1 runner only supports rh/temp/w profile variables")
+    return variables
 
 
 def _load_bool_mask(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -86,7 +89,7 @@ def _get_profile_input_path(cfg: Any, variable: str) -> Path:
             )
         return Path(resolved_inputs[variable])
 
-    return resolve_cra40_profile_input(variable)
+    return resolve_cra40_profile_input(variable, cfg.target_time)
 
 
 def _get_subarea_sections(cfg: Any) -> tuple[int, int]:

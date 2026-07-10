@@ -150,7 +150,7 @@ class RunnerStepTest(unittest.TestCase):
     def test_run_case_from_manifest_rejects_non_rh_even_when_steps_disabled(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "runner only supports the verified CRA40 front2 rh pipeline and CRA40 front1 rh/temp/w profile variables in this version",
+            "front2 requires at least 'rh' profile variable",
         ):
             self._run_manifest(
                 overrides={
@@ -164,20 +164,34 @@ class RunnerStepTest(unittest.TestCase):
         from pipeline.config import load_case_config
         from pipeline.runner import run_case
 
-        for attr, value in (
-            ("dataset", "not-cra40"),
-            ("front_id", "front1"),
-            ("target_time", "2017-06-23T00"),
-        ):
-            cfg = load_case_config(Path("pipeline/schemas/pipeline_config.yaml"))
-            setattr(cfg, attr, value)
+        cfg = load_case_config(Path("pipeline/schemas/pipeline_config.yaml"))
 
-            with self.subTest(attr=attr, value=value):
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "runner only supports the verified CRA40 front1/front2 2017-06-22T18 pipeline in this version",
-                ):
-                    run_case(cfg)
+        with self.subTest("unsupported_dataset"):
+            bad_cfg = load_case_config(Path("pipeline/schemas/pipeline_config.yaml"))
+            bad_cfg.dataset = "not-cra40"
+            with self.assertRaisesRegex(
+                ValueError,
+                "runner only supports CRA40 dataset",
+            ):
+                run_case(bad_cfg)
+
+        with self.subTest("unsupported_front_id"):
+            bad_cfg = load_case_config(Path("pipeline/schemas/pipeline_config.yaml"))
+            bad_cfg.front_id = "front3"
+            with self.assertRaisesRegex(
+                ValueError,
+                "runner only supports front1/front2",
+            ):
+                run_case(bad_cfg)
+
+        with self.subTest("missing_mask_assets"):
+            bad_cfg = load_case_config(Path("pipeline/schemas/pipeline_config.yaml"))
+            bad_cfg.target_time = "2017-06-29T00"
+            with self.assertRaisesRegex(
+                ValueError,
+                "no mask assets found",
+            ):
+                run_case(bad_cfg)
 
     def test_runner_main_returns_zero_and_prints_json_for_manifest(self) -> None:
         from contextlib import redirect_stderr, redirect_stdout

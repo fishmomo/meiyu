@@ -1,0 +1,32 @@
+case_name: cra40_front2_20170623T00
+dataset: cra40
+front_id: front2
+target_time: 2017-06-23T00
+
+steps:
+  inventory: true
+  masks: true
+  geometry: true
+  profiles: true
+  subareas: true
+  statistics: true
+  diagnostics: true
+
+params:
+  geometry:
+    degree: 4
+    dense_points: 1000
+    n_sections: 8
+    distance: 1.0
+    n_points: 9
+    delta_x: 0.1
+  profiles:
+    variables:
+      - rh
+  subareas:
+    start_section: 1
+    end_section: 4
+
+inputs:
+  rh:
+    logical_name: CRA40_RHU_2017062300_GLB_0P25_HOUR_V1_0_0.grib2

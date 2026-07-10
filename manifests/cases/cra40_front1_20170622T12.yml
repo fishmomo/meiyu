@@ -1,0 +1,38 @@
+case_name: cra40_front1_20170622T12
+dataset: cra40
+front_id: front1
+target_time: 2017-06-22T12
+
+steps:
+  inventory: true
+  masks: true
+  geometry: true
+  profiles: true
+  subareas: true
+  statistics: true
+  diagnostics: true
+
+params:
+  geometry:
+    degree: 4
+    dense_points: 1000
+    n_sections: 8
+    distance: 1.0
+    n_points: 9
+    delta_x: 0.1
+  profiles:
+    variables:
+      - rh
+      - temp
+      - w
+  subareas:
+    start_section: 1
+    end_section: 4
+
+inputs:
+  rh:
+    logical_name: CRA40_RHU_2017062212_GLB_0P25_HOUR_V1_0_0.grib2
+  temp:
+    logical_name: CRA40_TEM_2017062212_GLB_0P25_HOUR_V1_0_0.grib2
+  w:
+    logical_name: CRA40_VVP_2017062212_GLB_0P25_HOUR_V1_0_0.grib2

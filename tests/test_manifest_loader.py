@@ -264,7 +264,7 @@ def test_build_runtime_config_does_not_apply_front1_mapping_to_other_fronts(
     assert cfg.resolved_inputs["temp"].endswith("CRA40_TEMP_FRONT2_CUSTOM.grib2")
 
 
-def test_build_runtime_config_does_not_apply_front1_mapping_to_other_times(
+def test_build_runtime_config_applies_front1_mapping_to_all_supported_times(
     tmp_path,
 ):
     manifest_path = tmp_path / "case.yml"
@@ -298,7 +298,7 @@ def test_build_runtime_config_does_not_apply_front1_mapping_to_other_times(
                 "    end_section: 4",
                 "inputs:",
                 "  w:",
-                "    logical_name: CRA40_W_OTHER_TIME_CUSTOM.grib2",
+                "    logical_name: CRA40_VVP_2017062212_GLB_0P25_HOUR_V1_0_0.grib2",
             ]
         ),
         encoding="utf-8",
@@ -306,7 +306,9 @@ def test_build_runtime_config_does_not_apply_front1_mapping_to_other_times(
 
     cfg = build_runtime_config(manifest_path)
 
-    assert cfg.resolved_inputs["w"].endswith("CRA40_W_OTHER_TIME_CUSTOM.grib2")
+    assert cfg.resolved_inputs["w"].endswith(
+        "CRA40_VVP_2017062212_GLB_0P25_HOUR_V1_0_0.grib2"
+    )
 
 
 def test_build_runtime_config_prefers_relative_input_path(tmp_path):
