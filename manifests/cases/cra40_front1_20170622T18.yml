@@ -10,6 +10,7 @@ steps:
   profiles: true
   subareas: true
   statistics: true
+  diagnostics: true
 
 params:
   geometry:

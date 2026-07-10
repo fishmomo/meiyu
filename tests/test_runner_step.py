@@ -33,6 +33,10 @@ class RunnerStepTest(unittest.TestCase):
         )
         self.assertIn("subarea_mean", summary["statistics"]["variables"]["rh"])
         self.assertEqual(summary["statistics"]["status"], "completed")
+        self.assertEqual(summary["diagnostics"]["status"], "completed")
+        self.assertGreaterEqual(len(summary["diagnostics"]["files"]), 1)
+        for fpath in summary["diagnostics"]["files"]:
+            self.assertTrue(str(fpath).endswith(".png"))
 
     def test_run_case_from_front1_manifest_returns_multivariable_summary(self) -> None:
         from pipeline.runner import run_case_from_manifest
@@ -50,6 +54,8 @@ class RunnerStepTest(unittest.TestCase):
         for variable in ("rh", "temp", "w"):
             self.assertIn("subarea_mean", summary["statistics"]["variables"][variable])
         self.assertEqual(summary["statistics"]["status"], "completed")
+        self.assertEqual(summary["diagnostics"]["status"], "completed")
+        self.assertGreaterEqual(len(summary["diagnostics"]["files"]), 1)
 
     def test_run_case_returns_summary_from_pipeline_config(self) -> None:
         from pipeline.config import load_case_config

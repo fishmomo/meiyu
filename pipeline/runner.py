@@ -17,6 +17,7 @@ from pipeline.steps.geometry import build_geometry_from_mask
 from pipeline.steps.inventory import build_inventory_report
 from pipeline.steps.masks import resolve_case_masks
 from pipeline.steps.profiles import build_profile_bundle_from_field
+from pipeline.steps.diagnostics import write_front_diagnostics
 from pipeline.steps.statistics import build_masked_mean
 from pipeline.steps.subareas import build_subarea_mask
 
@@ -245,6 +246,7 @@ def run_case(cfg) -> dict[str, object]:
                 lons,
             )
 
+    profile_bundle_cache: dict[str, object] = {}
     if profiles_enabled:
         profile_summaries: dict[str, dict[str, object]] = {}
         for variable in profile_variables:
@@ -257,6 +259,7 @@ def run_case(cfg) -> dict[str, object]:
                 lons,
                 geometry,
             )
+            profile_bundle_cache[variable] = profile_bundle
             profile_summaries[variable] = {
                 "bundle_shape": list(profile_bundle.values.shape),
                 "status": "completed",
@@ -307,6 +310,19 @@ def run_case(cfg) -> dict[str, object]:
     else:
         statistics_summary = _skipped_summary()
 
+    diagnostics_enabled = _is_step_enabled(cfg, "diagnostics")
+    if diagnostics_enabled and profiles_enabled and profile_bundle_cache:
+        figure_paths = write_front_diagnostics(
+            cfg.case_name,
+            output_dirs["diagnostics"],
+            geometry,
+            profile_bundle_cache,
+            statistics_summary,
+        )
+        diagnostics_summary = {"enabled": True, "status": "completed", "files": figure_paths}
+    else:
+        diagnostics_summary = _skipped_summary()
+
     return {
         "case_name": cfg.case_name,
         "inventory": inventory,
@@ -319,6 +335,7 @@ def run_case(cfg) -> dict[str, object]:
         "profiles": profiles_summary,
         "subareas": subareas_summary,
         "statistics": statistics_summary,
+        "diagnostics": diagnostics_summary,
     }
 
 
