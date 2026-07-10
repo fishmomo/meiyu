@@ -10,6 +10,13 @@ def _require_existing(path: str) -> str:
     return path
 
 
+def existing_cra40_front1_mask_assets(target_time: str) -> dict[str, str]:
+    return {
+        "front_mask": _require_existing(cra40_front_mask(1, target_time)),
+        "extend_mask": _require_existing(cra40_front_extend(1, target_time)),
+    }
+
+
 def existing_cra40_front2_mask_assets(target_time: str) -> dict[str, str]:
     compact_label = cra40_front2_subarea_time_token(target_time)
     return {
