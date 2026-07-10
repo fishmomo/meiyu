@@ -83,7 +83,7 @@ ds = xr.open_dataset("data/interim/manual_masks/cra40/front2/2017-06-22T18.nc")
 
 当前已经落地并验证过的主链路是：
 
-`mask -> geometry -> profiles -> subareas -> statistics`
+`mask -> geometry -> profiles -> subareas -> statistics -> diagnostics`
 
 对应模块如下：
 
@@ -93,13 +93,19 @@ ds = xr.open_dataset("data/interim/manual_masks/cra40/front2/2017-06-22T18.nc")
 - `profiles`：基于 3D 场沿切线抽取剖面 bundle
 - `subareas`：根据 sections 之间的关系，在主掩膜内部筛出子区域
 - `statistics`：基于主掩膜或子区域掩膜，对网格场做掩膜平均
+- `diagnostics`：基于剖面 bundle 产出最小研究辅助图件
 
 当前 `runner` 现在已经能做两层事情：
 
 1. 基础层：
    读取配置、建立输出目录、生成 `inventory` 与 `masks` 摘要
 2. 串联层：
-   对当前已验证案例继续执行 `geometry -> profiles -> subareas -> statistics`
+   对当前已验证案例继续执行 `geometry -> profiles -> subareas -> statistics -> diagnostics`
+
+已验证的完整案例包括：
+
+- `CRA40 + front2 + 2017-06-22T18 + rh`
+- `CRA40 + front1 + 2017-06-22T18 + rh / temp / w`
 
 也就是说：
 
@@ -128,7 +134,13 @@ conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra4
 conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml --override params.geometry.n_sections=6
 ```
 
-这条命令会输出 JSON，里面包含 `case_name`、`geometry`、`profiles`、`subareas` 和 `statistics` 等摘要字段。IDE 里如果想逐步看中间对象，继续用下面的 Python 方式最方便。
+运行 `front1 V1` 多变量个例（含 `rh / temp / w` 三变量剖面、子区域统计与最小 diagnostics 图件）：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front1_20170622T18.yml
+```
+
+这条命令会输出 JSON，里面包含 `case_name`、`geometry`、`profiles`、`subareas`、`statistics` 和 `diagnostics` 等摘要字段。IDE 里如果想逐步看中间对象，继续用下面的 Python 方式最方便。
 
 下面给出一条当前项目内已经真实验证过的最小链路。建议先按这个案例跑通，再扩展到其他时次、其他变量、其他锋面。
 
@@ -471,14 +483,14 @@ outputs/
 
 ### 6.2 哪些结果目前还是“内存对象”
 
-当前这条最小链路里，有些步骤已经有标准化 Python 对象，但还没有全部自动写成文件：
+当前这条最小链路里，有些步骤已经有标准化 Python 对象，但不是每一步都自动写成文件：
 
 - `GeometryResult`
 - `ProfileBundle`
 - `submask` 布尔数组
 - `front_mean / sub_mean` 数值结果
 
-也就是说，当前新流水线已经把“计算接口”搭好了，但不是每一步都自动落文件。
+`diagnostics` 步骤已经能够自动落盘 PNG 图件到 `outputs/figures/<case_name>/diagnostics/`。
 
 ### 6.3 哪些结果目前仍主要参考 legacy 输出
 
@@ -498,5 +510,5 @@ outputs/
 
 ## 7. 一句话总结
 
-当前这版新流水线已经适合做“项目内、真实数据、按步骤复用”的研究入口。最稳妥的使用方式，是先围绕 `CRA40 front2 2017-06-22T18` 跑通 `mask -> geometry -> profiles -> subareas -> statistics`，确认你理解了每一步输入输出，再逐步扩展到更多个例。
+当前这版新流水线已经适合做“项目内、真实数据、按步骤复用”的研究入口。最稳妥的使用方式，是先围绕 `CRA40 front2 2017-06-22T18` 跑通 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics`，确认你理解了每一步输入输出，再逐步扩展到 `front1 V1` 和更多个例。
 

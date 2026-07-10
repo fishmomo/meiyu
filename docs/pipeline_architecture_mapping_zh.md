@@ -64,14 +64,12 @@ pipeline/
 2. manifest/配置解析层：`pipeline.manifest_loader.build_runtime_config(path, overrides=None)`
 3. 统一入口层：`pipeline.runner.run_case(cfg)` 与 `pipeline.runner.run_case_from_manifest(path, overrides=None)`
 
-其中统一入口层目前不是“通用总控器”，而是“受支持边界明确的串联器”。按照当前实现与测试，它只正式支持已经验证过的案例链路：
+其中统一入口层目前不是“通用总控器”，而是“受支持边界明确的串联器”。按照当前实现与测试，它正式支持以下已验证案例链路：
 
-- 数据集：`CRA40`
-- 锋面：`front2`
-- 时次：`2017-06-22T18`
-- 变量：`rh`
+- `CRA40 + front2 + 2017-06-22T18 + rh`
+- `CRA40 + front1 + 2017-06-22T18 + rh / temp / w`
 
-这意味着当前新流水线已经不再只是分散函数集合，但也还没有泛化到 front1、ERA5、多变量批量运行或诊断图总控。
+这意味着当前新流水线已经围绕 `front1 V1` 和多变量做了保守桥接扩展，但还没有泛化到 ERA5、更多时次、批量运行或通用诊断图总控。
 
 第二阶段的边界需要按“基础链 / 可选分析链”来理解：
 
@@ -183,8 +181,8 @@ pipeline/
 | `pipeline.steps.profiles` | 沿 section 抽取三维场剖面 bundle | `frontal1_process_w.py`、`frontal1_process_rh.py`、`frontal2_process.py` 中剖面抽样逻辑 | 已迁移并已验证 | 模块接口具备扩展性，但当前统一入口只验证 `rh` |
 | `pipeline.steps.subareas` | 按 section 之间关系筛选子区域 | `frontal1_process_SelectSubArea.py` | 已迁移并已验证 | 已形成独立函数接口和测试，但与 legacy 子区域命名、图件产物尚未完全统一 |
 | `pipeline.steps.statistics` | 掩膜均值与时序均值计算 | `merge_csv.py`、`merge_csv fengmian2.py` 的统计内核 | 已迁移并已验证 | 当前已迁入的是统计计算能力，不是 legacy 全套 CSV/绘图流程 |
-| 架构中的 `diagnostics` 模块边界 | 诊断量时序图、个例图、人工识别辅助图 | `frontal_info_graphic_identification.py`；`frontal_processing_CRA40.py` 中诊断图部分 | 已有模块边界但仍主要依赖 legacy | 分层设计文档已经定义了边界，但 `pipeline/steps/` 当前没有同名实现文件，产物仍主要来自旧脚本 |
-| 通用化 `runner` 总入口 | 跨数据源、跨锋面、跨变量的统一串联 | 多个 legacy 脚本组合关系 | 尚未迁移到新流水线总入口 | 当前 `runner` 只正式支持已验证的 `CRA40 front2 2017-06-22T18 rh` 链路 |
+| `pipeline.steps.diagnostics` | 最小研究辅助图件落盘（剖面 overview） | `frontal_info_graphic_identification.py`；`frontal_processing_CRA40.py` 中诊断图部分 | 已迁移并已验证（最小能力） | 当前只实现最小图件集合，不等于完整替代 legacy 全部诊断图 |
+| 通用化 `runner` 总入口 | 跨数据源、跨锋面、跨变量的统一串联 | 多个 legacy 脚本组合关系 | 已部分迁移 | 当前 `runner` 正式支持 `CRA40 front2 2017-06-22T18 rh` 和 `CRA40 front1 2017-06-22T18 rh/temp/w` |
 
 映射时需要注意两点：
 
@@ -200,12 +198,13 @@ pipeline/
 这类能力同时满足两个条件：已经有新模块实现，并且已有测试或真实案例链路验证。
 
 - `inventory` 的目录快照与环境检查
-- `masks` 对 `CRA40 front2` 既有掩膜资产的解析
+- `masks` 对 `CRA40 front1/front2` 既有掩膜资产的显式解析
 - `geometry` 的中心线拟合与 section 采样框架生成
-- `profiles` 的三维场剖面抽样接口
+- `profiles` 的三维场剖面抽样接口，已验证 `rh / temp / w`
 - `subareas` 的子区域筛选
-- `statistics` 的掩膜均值计算
-- `runner` 对 `CRA40 front2 2017-06-22T18 rh` 链路的结构化串联
+- `statistics` 的掩膜均值计算，已支持 front1 多变量逐变量 `front_mean` 与 `subarea_mean`
+- `diagnostics` 的最小图件落盘
+- `runner` 对 `CRA40 front2 2017-06-22T18 rh` 与 `CRA40 front1 2017-06-22T18 rh/temp/w` 的结构化串联
 
 当前这些已验证能力在第二阶段里可以被 gating 拆开看，但语义不会变成“能力消失”：
 
@@ -223,9 +222,9 @@ pipeline/
 
 这类能力已经在架构文档中有明确位置，甚至已有部分相关资产，但当前主要结果仍来自旧脚本，或者新流水线尚未形成等价入口。
 
-- `diagnostics`：分层设计已经定义其职责，但当前诊断图、人工识别辅助图仍主要依赖 `frontal_info_graphic_identification.py` 与 `frontal_processing_CRA40.py`
 - 统计类 legacy 产物输出：新流水线已有均值计算接口，但 `merge_csv.py`、`merge_csv fengmian2.py` 产生的 legacy 图件仍是当前可直接对照的主要结果
 - 掩膜命名与产物规范：新流水线已经能消费现有掩膜，但像 `offset1.nc`、`area2_lonlat_0622T18.nc` 这类 legacy 风格命名仍在沿用
+- diagnostics 完整图件体系：最小 diagnostics 已能落盘，但连续帧动画、批量出图、完整替代 `frontal_info_graphic_identification.py` 仍主要依赖 legacy
 
 这一类能力不能写成“已全部迁移完成”，因为当前仍明显依赖旧脚本产物、旧命名或旧绘图流程。
 
@@ -233,10 +232,9 @@ pipeline/
 
 这类能力要么尚未进入 `runner`，要么尚未被证明能在统一入口下稳定工作。
 
-- front1 的统一串联入口
 - ERA5 的统一串联入口
-- `rh` 之外变量在 `runner` 中的正式支持，例如 `temp / w / thetae`
-- 诊断图自动串联与落盘
+- 更多时次的批量支持（front1/front2 均只验证了 `2017-06-22T18`）
+- diagnostics 的完整图件总调度与批量出图
 - 多案例批处理与批量调度
 - 完整中间文件体系和统一 manifest/落盘规范
 
@@ -259,16 +257,11 @@ pipeline/
 
 ### 6.2 扩展 front1
 
-建议入口：
+`front1 V1` 已经围绕 `CRA40 + 2017-06-22T18 + rh/temp/w` 完成最小可研究链路。后续扩展建议：
 
-- 优先补 `masks` 资产解析规则
-- 再验证 `geometry / profiles / subareas / statistics` 在 front1 掩膜上的行为
-- 最后才扩 `runner` 的支持边界
-
-原因：
-
-- 当前 `masks` 明确限制在 `front2`
-- front1 是否与现有 section 划分参数兼容，仍需要独立验证
+- 验证 `front1` 在更多时次上的稳定性
+- 若需要更多变量，先在 `profiles` 层扩展字段映射，再进入 `runner`
+- 若 front1 与 front2 的 section 参数不兼容，应在 manifest 参数层分别定义，而不是在 runner 里堆分支
 
 ### 6.3 扩展 ERA5
 
@@ -283,16 +276,11 @@ pipeline/
 
 ### 6.4 补齐 diagnostics
 
-建议入口：
+最小 `diagnostics` 已作为独立 step 落地并纳入 `runner`。后续补齐建议：
 
-- 先把 `diagnostics` 作为独立 step 落地
-- 明确它的输入、输出和与人工识别流程的关系
-- 之后再考虑是否纳入 `runner`
-
-原因：
-
-- 诊断图往往既是科研判读资产，也是维护排障资产
-- 它与当前“只返回摘要”的 runner 目标并不完全相同
+- 在现有 `write_front_diagnostics(...)` 基础上逐步增加更多图件类型（连续帧、组合图、热力图等）
+- 明确每种图件的输入、输出和与人工识别流程的关系
+- 保持 diagnostics 只消费 step 结果、不反向侵入底层逻辑的原则
 
 ### 6.5 规范化产物命名与落盘
 
@@ -355,4 +343,4 @@ pipeline/
 
 ## 8. 一句话结论
 
-当前新流水线已经完成了“围绕已验证 CRA40 front2 个例的可复用 step 模块化”和“受限 runner 串联入口”，但还没有完成 diagnostics、front1、ERA5、多变量与通用总入口的整体迁移。维护与扩展时，必须始终按“已迁移并已验证”“已有模块边界但仍主要依赖 legacy”“尚未迁移到新流水线总入口”这三类状态来判断，不要把未验证能力写成已完成能力。
+当前新流水线已经完成了“围绕已验证 CRA40 front2 个例的可复用 step 模块化”和“front1 V1 多变量保守桥接扩展”。`front1 V1`（`CRA40 + 2017-06-22T18 + rh/temp/w`）已经具备 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics` 的完整串联能力。尚未完成的是 ERA5 统一入口、更多时次批量支持、diagnostics 完整图件总调度和通用总入口。维护与扩展时，必须始终按“已迁移并已验证”“已有模块边界但仍主要依赖 legacy”“尚未迁移到新流水线总入口”这三类状态来判断，不要把未验证能力写成已完成能力。
