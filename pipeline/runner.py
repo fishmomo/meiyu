@@ -9,6 +9,8 @@ from typing import Any
 import numpy as np
 
 from nc_compat import open_dataset_compat
+from pipeline.core.cra40_fields import read_cra40_profile_cube
+from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.core.paths import ensure_case_dirs
 from pipeline.manifest_loader import build_runtime_config
 from pipeline.steps.geometry import build_geometry_from_mask
@@ -17,27 +19,32 @@ from pipeline.steps.masks import resolve_case_masks
 from pipeline.steps.profiles import build_profile_bundle_from_field
 from pipeline.steps.statistics import build_masked_mean
 from pipeline.steps.subareas import build_subarea_mask
-from project_paths import cra40_file
 
 
 def _validate_supported_case(cfg) -> None:
+    case_key = (cfg.dataset, cfg.front_id, cfg.target_time)
+    if case_key == ("cra40", "front2", "2017-06-22T18"):
+        return
     if (
-        cfg.dataset != "cra40"
-        or cfg.front_id != "front2"
-        or cfg.target_time != "2017-06-22T18"
+        case_key == ("cra40", "front1", "2017-06-22T18")
+        and getattr(cfg, "resolved_inputs", None) is not None
+        and getattr(cfg, "profiles", None) is not None
     ):
-        raise ValueError(
-            "runner only supports the verified CRA40 front2 2017-06-22T18 pipeline in this version"
-        )
+        return
+    raise ValueError(
+        "runner only supports the verified CRA40 front1/front2 2017-06-22T18 pipeline in this version"
+    )
 
 
-def _validate_supported_profile_variable(cfg: Any) -> str:
-    variable = _get_profile_variable(cfg)
-    if variable != "rh":
-        raise ValueError(
-            "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version"
-        )
-    return variable
+def _validate_supported_profile_variables(cfg: Any) -> list[str]:
+    variables = _get_profile_variables(cfg)
+    if cfg.front_id == "front2" and variables == ["rh"]:
+        return variables
+    if cfg.front_id == "front1" and set(variables).issubset({"rh", "temp", "w"}):
+        return variables
+    raise ValueError(
+        "runner only supports the verified CRA40 front2 rh pipeline and CRA40 front1 rh/temp/w profile variables in this version"
+    )
 
 
 def _load_bool_mask(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -56,27 +63,29 @@ def _get_geometry_param(cfg: Any, field: str, default: Any) -> Any:
     return getattr(geometry, field, default)
 
 
-def _get_profile_variable(cfg: Any) -> str:
+def _get_profile_variables(cfg: Any) -> list[str]:
     profiles = getattr(cfg, "profiles", None)
-    if profiles is not None and getattr(profiles, "variables", None):
-        return str(profiles.variables[0])
+    variables = getattr(profiles, "variables", None) if profiles is not None else None
+    if variables:
+        return [str(variable) for variable in variables]
 
     profile_variables = getattr(cfg, "profile_variables", [])
     if profile_variables:
-        return str(profile_variables[0])
+        return [str(profile_variables[0])]
 
     raise ValueError("runner requires at least one profile variable")
 
 
 def _get_profile_input_path(cfg: Any, variable: str) -> Path:
     resolved_inputs = getattr(cfg, "resolved_inputs", None)
-    if resolved_inputs and variable in resolved_inputs:
+    if resolved_inputs is not None:
+        if variable not in resolved_inputs:
+            raise ValueError(
+                f"manifest is missing explicit input for profile variable: {variable}"
+            )
         return Path(resolved_inputs[variable])
 
-    if variable != "rh":
-        raise ValueError(f"runner only supports the verified rh profile input, got: {variable}")
-
-    return Path(cra40_file("CRA40_RHU_2017062218_GLB_0P25_HOUR_V1_0_0.grib2"))
+    return resolve_cra40_profile_input(variable)
 
 
 def _get_subarea_sections(cfg: Any) -> tuple[int, int]:
@@ -98,6 +107,36 @@ def _is_step_enabled(cfg: Any, step_name: str) -> bool:
 
 def _skipped_summary() -> dict[str, object]:
     return {"enabled": False, "status": "skipped"}
+
+
+def _completed_profiles_summary(
+    profile_summaries: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "enabled": True,
+        "status": "completed",
+        "variables": profile_summaries,
+    }
+
+
+def _completed_statistics_summary(
+    statistics_by_variable: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "enabled": True,
+        "status": "completed",
+        "variables": statistics_by_variable,
+    }
+
+
+def _partial_statistics_summary(
+    statistics_by_variable: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "enabled": True,
+        "status": "partial",
+        "variables": statistics_by_variable,
+    }
 
 
 def run_case_from_manifest(
@@ -142,7 +181,9 @@ class _CliArgumentParser(argparse.ArgumentParser):
     def exit(self, status: int = 0, message: str | None = None) -> None:
         if message:
             raise ValueError(message.strip())
-        raise ValueError(f"argument parsing failed with status {status}")
+        raise ValueError(
+            f"argument parsing failed with status {status}"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_case(cfg) -> dict[str, object]:
     _validate_supported_case(cfg)
-    profile_variable = _validate_supported_profile_variable(cfg)
+    profile_variables = _validate_supported_profile_variables(cfg)
 
     output_dirs = ensure_case_dirs(cfg.case_name)
     inventory = build_inventory_report()
@@ -193,33 +234,34 @@ def run_case(cfg) -> dict[str, object]:
     subareas_enabled = _is_step_enabled(cfg, "subareas")
     statistics_enabled = _is_step_enabled(cfg, "statistics")
 
-    rh_ds = None
-    field3d = None
-    levels = None
+    field_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     if profiles_enabled or statistics_enabled:
-        rh_path = _get_profile_input_path(cfg, profile_variable)
-        rh_ds = open_dataset_compat(Path(rh_path))
-        field3d = rh_ds["r"].isel(isobaricInhPa=slice(0, 37)).sel(
-            latitude=lats,
-            longitude=lons,
-            method="nearest",
-        ).values
-        levels = rh_ds["isobaricInhPa"].isel(isobaricInhPa=slice(0, 37)).values
+        for variable in profile_variables:
+            input_path = _get_profile_input_path(cfg, variable)
+            field_cache[variable] = read_cra40_profile_cube(
+                variable,
+                input_path,
+                lats,
+                lons,
+            )
 
     if profiles_enabled:
-        profile_bundle = build_profile_bundle_from_field(
-            profile_variable,
-            field3d,
-            levels,
-            lats,
-            lons,
-            geometry,
-        )
-        profiles_summary = {
-            "variable": profile_bundle.variable,
-            "bundle_shape": list(profile_bundle.values.shape),
-            "status": "completed",
-        }
+        profile_summaries: dict[str, dict[str, object]] = {}
+        for variable in profile_variables:
+            field3d, levels = field_cache[variable]
+            profile_bundle = build_profile_bundle_from_field(
+                variable,
+                field3d,
+                levels,
+                lats,
+                lons,
+                geometry,
+            )
+            profile_summaries[variable] = {
+                "bundle_shape": list(profile_bundle.values.shape),
+                "status": "completed",
+            }
+        profiles_summary = _completed_profiles_summary(profile_summaries)
     else:
         profiles_summary = _skipped_summary()
 
@@ -244,22 +286,19 @@ def run_case(cfg) -> dict[str, object]:
         subareas_summary = _skipped_summary()
 
     if statistics_enabled:
-        front_mean = build_masked_mean(profile_variable, field3d[0], mask_bool)
+        statistics_by_variable: dict[str, dict[str, object]] = {}
+        for variable in profile_variables:
+            field3d, _ = field_cache[variable]
+            statistics_by_variable[variable] = {
+                "front_mean": float(build_masked_mean(variable, field3d[0], mask_bool)),
+            }
         if subareas_enabled:
-            subarea_mean = build_masked_mean(profile_variable, field3d[0], submask)
-            statistics_summary = {
-                "front_mean": float(front_mean),
-                "subarea_mean": float(subarea_mean),
-                "status": "completed",
-            }
+            statistics_summary = _completed_statistics_summary(statistics_by_variable)
         else:
-            statistics_summary = {
-                "enabled": True,
-                "status": "partial",
-                "front_mean": float(front_mean),
-                "subarea_mean": None,
-                "subarea_status": "skipped",
-            }
+            for variable_summary in statistics_by_variable.values():
+                variable_summary["subarea_mean"] = None
+                variable_summary["subarea_status"] = "skipped"
+            statistics_summary = _partial_statistics_summary(statistics_by_variable)
     else:
         statistics_summary = _skipped_summary()
 

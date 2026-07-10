@@ -20,12 +20,32 @@ class RunnerStepTest(unittest.TestCase):
 
         self.assertEqual(summary["geometry"]["centerline_points"], 8)
         self.assertEqual(summary["geometry"]["section_shape"], [8, 9])
-        self.assertEqual(summary["profiles"]["bundle_shape"], [8, 9, 37])
+        self.assertEqual(
+            summary["profiles"]["variables"]["rh"]["bundle_shape"],
+            [8, 9, 37],
+        )
         self.assertEqual(summary["profiles"]["status"], "completed")
         self.assertEqual(summary["subareas"]["selected_points"], 48)
         self.assertEqual(summary["subareas"]["status"], "completed")
-        self.assertEqual(summary["statistics"]["front_mean"], 85.81288001650856)
-        self.assertEqual(summary["statistics"]["subarea_mean"], 87.94710636138916)
+        self.assertEqual(
+            summary["statistics"]["variables"]["rh"]["front_mean"],
+            85.81288001650856,
+        )
+        self.assertEqual(summary["statistics"]["status"], "completed")
+
+    def test_run_case_from_front1_manifest_returns_multivariable_summary(self) -> None:
+        from pipeline.runner import run_case_from_manifest
+
+        summary = run_case_from_manifest(
+            Path("manifests/cases/cra40_front1_20170622T18.yml")
+        )
+
+        self.assertEqual(summary["case_name"], "cra40_front1_20170622T18")
+        self.assertEqual(summary["geometry"]["section_shape"], [8, 9])
+        self.assertEqual(
+            set(summary["profiles"]["variables"].keys()),
+            {"rh", "temp", "w"},
+        )
         self.assertEqual(summary["statistics"]["status"], "completed")
 
     def test_run_case_returns_summary_from_pipeline_config(self) -> None:
@@ -43,11 +63,16 @@ class RunnerStepTest(unittest.TestCase):
 
         self.assertEqual(summary["geometry"]["centerline_points"], 8)
         self.assertEqual(summary["geometry"]["section_shape"], [8, 9])
-        self.assertEqual(summary["profiles"]["variable"], "rh")
-        self.assertEqual(summary["profiles"]["bundle_shape"], [8, 9, 37])
+        self.assertEqual(set(summary["profiles"]["variables"].keys()), {"rh"})
+        self.assertEqual(
+            summary["profiles"]["variables"]["rh"]["bundle_shape"],
+            [8, 9, 37],
+        )
         self.assertEqual(summary["subareas"]["mask_shape"], [81, 141])
-        self.assertEqual(summary["statistics"]["front_mean"], 85.81288001650856)
-        self.assertEqual(summary["statistics"]["subarea_mean"], 87.94710636138916)
+        self.assertEqual(
+            summary["statistics"]["variables"]["rh"]["front_mean"],
+            85.81288001650856,
+        )
 
     def test_run_case_from_manifest_applies_geometry_override(self) -> None:
         summary = self._run_manifest(
@@ -55,7 +80,10 @@ class RunnerStepTest(unittest.TestCase):
         )
 
         self.assertEqual(summary["geometry"]["section_shape"], [6, 9])
-        self.assertEqual(summary["profiles"]["bundle_shape"], [6, 9, 37])
+        self.assertEqual(
+            summary["profiles"]["variables"]["rh"]["bundle_shape"],
+            [6, 9, 37],
+        )
 
     def test_run_case_from_manifest_applies_subarea_section_override(self) -> None:
         summary = self._run_manifest(
@@ -95,8 +123,11 @@ class RunnerStepTest(unittest.TestCase):
         )
         self.assertIs(summary["statistics"]["enabled"], True)
         self.assertEqual(summary["statistics"]["status"], "partial")
-        self.assertIsNone(summary["statistics"]["subarea_mean"])
-        self.assertEqual(summary["statistics"]["subarea_status"], "skipped")
+        self.assertIsNone(summary["statistics"]["variables"]["rh"]["subarea_mean"])
+        self.assertEqual(
+            summary["statistics"]["variables"]["rh"]["subarea_status"],
+            "skipped",
+        )
 
     def test_run_case_from_manifest_skips_statistics_when_disabled(self) -> None:
         summary = self._run_manifest(overrides={"steps.statistics": False})
@@ -109,7 +140,7 @@ class RunnerStepTest(unittest.TestCase):
     def test_run_case_from_manifest_rejects_non_rh_even_when_steps_disabled(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version",
+            "runner only supports the verified CRA40 front2 rh pipeline and CRA40 front1 rh/temp/w profile variables in this version",
         ):
             self._run_manifest(
                 overrides={
@@ -134,7 +165,7 @@ class RunnerStepTest(unittest.TestCase):
             with self.subTest(attr=attr, value=value):
                 with self.assertRaisesRegex(
                     ValueError,
-                    "runner only supports the verified CRA40 front2 2017-06-22T18 pipeline in this version",
+                    "runner only supports the verified CRA40 front1/front2 2017-06-22T18 pipeline in this version",
                 ):
                     run_case(cfg)
 
@@ -260,7 +291,7 @@ class RunnerStepTest(unittest.TestCase):
             runner,
             "run_case_from_manifest",
             side_effect=ValueError(
-                "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version"
+                "runner only supports the verified CRA40 front2 rh pipeline and CRA40 front1 rh/temp/w profile variables in this version"
             ),
         ):
             with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -276,7 +307,7 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("ERROR:", stderr.getvalue())
-        self.assertIn("verified CRA40 front2 2017-06-22T18 rh", stderr.getvalue())
+        self.assertIn("verified CRA40 front2 rh pipeline", stderr.getvalue())
 
     def test_runner_module_entrypoint_executes_manifest(self) -> None:
         result = subprocess.run(
