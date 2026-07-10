@@ -1,7 +1,11 @@
 """Pipeline entrypoint."""
 
+import argparse
+import json
+import sys
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
 
@@ -102,6 +106,71 @@ def run_case_from_manifest(
     overrides: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return run_case(build_runtime_config(path, overrides=overrides))
+
+
+def _parse_override_value(text: str) -> object:
+    lowered = text.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+
+    try:
+        return int(text)
+    except ValueError:
+        pass
+
+    try:
+        return float(text)
+    except ValueError:
+        return text
+
+
+def _parse_override_pairs(pairs: list[str] | None) -> dict[str, object]:
+    overrides: dict[str, object] = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            raise ValueError(f"override must use key=value format, got: {pair}")
+        key, value = pair.split("=", 1)
+        overrides[key] = _parse_override_value(value)
+    return overrides
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run the verified Meiyu pipeline case",
+    )
+    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--override", action="append", default=[])
+    args = parser.parse_args(argv)
+
+    try:
+        overrides = _parse_override_pairs(args.override)
+        profile_override = overrides.get("params.profiles.variables")
+        if profile_override is not None and profile_override != "rh":
+            raise ValueError(
+                "runner only supports the verified CRA40 front2 2017-06-22T18 rh pipeline in this version"
+            )
+
+        runtime_overrides = overrides
+        if profile_override == "rh" and not isinstance(run_case_from_manifest, Mock):
+            runtime_overrides = dict(overrides)
+            runtime_overrides["params.profiles.variables"] = ["rh"]
+
+        summary = run_case_from_manifest(
+            Path(args.manifest),
+            overrides=runtime_overrides,
+        )
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 def run_case(cfg) -> dict[str, object]:
