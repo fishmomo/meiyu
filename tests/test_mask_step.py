@@ -46,6 +46,13 @@ class MaskStepTest(unittest.TestCase):
 
         self.assertEqual(str(ctx.exception), missing_path)
 
+    def test_front1_rejects_non_v1_target_time_even_if_files_exist(self) -> None:
+        from pipeline.steps.masks import resolve_case_masks
+
+        with patch("pathlib.Path.exists", return_value=True):
+            with self.assertRaisesRegex(ValueError, "2017-06-22T18"):
+                resolve_case_masks("front1", "2017-06-22T00")
+
 
 if __name__ == "__main__":
     unittest.main()
