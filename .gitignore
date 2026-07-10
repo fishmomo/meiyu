@@ -1,0 +1,19 @@
+# Research data and generated outputs
+data/
+outputs/
+
+# Python caches and test artifacts
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Local agent/runtime scratch
+.agents/
+.superpowers/
+.tmp/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,358 @@
+# 梅雨锋新流水线技术架构与旧工程映射
+
+## 1. 文档目的与读者
+
+本文档面向三类读者：
+
+- 维护 `pipeline/` 与相关基础设施的开发者
+- 需要把新流水线继续扩展到更多数据源、锋面类型或变量的后续接手者
+- 需要在新模块和旧科研脚本之间做问题追溯的人
+
+本文档的目标不是快速教人“怎么跑”，而是回答四个维护问题：
+
+1. 当前新流水线按什么结构组织。
+2. `pipeline/steps/` 中各模块分别承接了旧工程的哪些逻辑。
+3. 哪些能力已经迁移并经过验证，哪些仍主要依赖 legacy，哪些还没有进入新流水线总入口。
+4. 后续如果要扩展 front1、ERA5、多变量或诊断图，应从哪里接入，而不是直接继续堆叠旧脚本。
+
+本文档的判断依据来自：
+
+- `docs/superpowers/specs/2026-07-09-architecture-mapping-and-runner-design.md`
+- `docs/2026-07-05-layered-pipeline-design.md`
+- `docs/legacy_project_smoke_status_2026-07-05.md`
+- `docs/pipeline_quickstart_zh.md`
+- `pipeline/steps/` 当前实现
+- `tests/` 中与 step 和 runner 对应的验证用例
+
+## 2. 当前新流水线总体结构
+
+当前新流水线已经形成“manifest 案例层 + 配置入口/兼容层 + 路径与兼容层 + step 模块 + 受限 runner 入口”的结构。
+
+```text
+manifests/
+  cases/
+    cra40_front2_20170622T18.yml
+pipeline/
+  config.py
+  manifest_loader.py
+  manifest_models.py
+  runner.py
+  core/
+    paths.py
+    front_ops.py
+    mask_ops.py
+    section_ops.py
+    stat_ops.py
+    subarea_ops.py
+  steps/
+    inventory.py
+    masks.py
+    geometry.py
+    profiles.py
+    subareas.py
+    statistics.py
+```
+
+配套基础设施位于：
+
+- `project_paths.py`：统一项目内输入输出路径
+- `nc_compat.py`：解决 Windows 中文路径下 `xarray/netCDF4/cfgrib/pygrib` 读写兼容问题
+
+从执行关系看，当前新流水线分成两层：
+
+1. 可复用计算模块层：`inventory -> masks -> geometry -> profiles -> subareas -> statistics`
+2. manifest/配置解析层：`pipeline.manifest_loader.build_runtime_config(path, overrides=None)`
+3. 统一入口层：`pipeline.runner.run_case(cfg)` 与 `pipeline.runner.run_case_from_manifest(path, overrides=None)`
+
+其中统一入口层目前不是“通用总控器”，而是“受支持边界明确的串联器”。按照当前实现与测试，它只正式支持已经验证过的案例链路：
+
+- 数据集：`CRA40`
+- 锋面：`front2`
+- 时次：`2017-06-22T18`
+- 变量：`rh`
+
+这意味着当前新流水线已经不再只是分散函数集合，但也还没有泛化到 front1、ERA5、多变量批量运行或诊断图总控。
+
+第二阶段的边界需要按“基础链 / 可选分析链”来理解：
+
+- `inventory / masks / geometry` 仍然是必跑基础链
+- `profiles / subareas / statistics` 属于可选分析链，可由 `overrides` 和 step gating 单独开关
+- 顶层摘要 key 保持固定，不会因为可选步骤关闭而增删字段
+- 可选步骤的状态要显式表达为 `completed / partial / skipped`
+
+## 3. 模块边界与职责
+
+### 3.1 `inventory`
+
+职责：
+
+- 快照式检查 `raw / interim / processed` 三类目录是否存在
+- 汇总环境依赖可用性，例如 `xarray`、`cfgrib`、`cartopy`、`matplotlib`
+
+边界：
+
+- 它不负责科学计算
+- 它更接近“项目运行基线检查”而不是旧科研脚本的直接翻版
+
+### 3.2 `masks`
+
+职责：
+
+- 解析当前案例可直接复用的掩膜资产位置
+- 对外暴露主掩膜、extend 掩膜、子区域掩膜三类入口
+
+边界：
+
+- 当前实现仍限定在 `CRA40 + front2`
+- 它解决的是“掩膜资产定位与组织”，不是重新生成全部人工识别成果
+
+### 3.3 `geometry`
+
+职责：
+
+- 从主掩膜提取有效轮廓
+- 拟合锋面中心线
+- 估计法线方向
+- 建立切线/法线采样框架
+
+边界：
+
+- 输出是几何抽样框架，不直接产出物理量剖面图
+- 算法入口已经独立，但仍以“已有掩膜”为输入前提
+
+### 3.4 `profiles`
+
+职责：
+
+- 基于 `geometry` 提供的采样框架，从三维场中抽取剖面 bundle
+- 将“变量名 + 剖面数组”封装为稳定对象
+
+边界：
+
+- 当前公开接口可以承接不同变量
+- 但真正进入已验证统一入口的只有 `rh`
+
+### 3.5 `subareas`
+
+职责：
+
+- 根据 section 之间的空间关系，从主掩膜内部筛出子区域
+- 生成子区域布尔掩膜
+
+边界：
+
+- 它只负责子区域选择逻辑
+- 不负责读取 legacy 子区域图件，也不负责统计
+
+### 3.6 `statistics`
+
+职责：
+
+- 对主掩膜或子区域掩膜内的格点做平均
+- 提供单时次均值和时序均值接口
+
+边界：
+
+- 当前 step 只封装统计计算
+- legacy 中完整的 CSV 汇总与制图流程并没有整体迁入新总入口
+
+### 3.7 `runner`
+
+职责：
+
+- 校验当前配置是否位于已验证支持边界内
+- 串联 `inventory -> masks -> geometry -> profiles -> subareas -> statistics`
+- 返回结构化摘要，而不是承诺完整科研落盘产物
+- 在第二阶段把基础链与可选分析链分开处理，确保 `inventory / masks / geometry` 必跑
+- 对 `profiles / subareas / statistics` 提供显式 step gating，关闭时要在摘要里标出 `skipped`
+
+边界：
+
+- 当前不是通用入口
+- 当前不是多案例批处理器
+- 当前不是诊断图、ERA5、front1、多变量统一总控
+- 当前返回的顶层摘要 key 结构固定不变，步骤是否执行通过 `completed / partial / skipped` 这类状态表达
+
+## 4. 新模块与旧脚本映射表
+
+| 新模块 | 当前承接职责 | 主要对应的旧脚本/旧逻辑 | 当前状态 | 说明 |
+| --- | --- | --- | --- | --- |
+| `pipeline.steps.inventory` | 目录与环境基线检查 | 本轮整理出的旧工程运行基线，而非单一 legacy 脚本 | 已迁移并已验证 | 已有对应 step 与测试；作用是把旧工程“能否运行”的前置条件结构化 |
+| `pipeline.steps.masks` | 已有掩膜资产定位、主掩膜/extend/子区域掩膜入口 | `front_grid_lon_lat_unification.py`；`frontal_processing_CRA40.py` 中 offset 掩膜相关产物组织 | 已迁移并已验证 | 当前验证依赖项目内现成掩膜资产，不等于已迁入“重新生成全部掩膜”的完整能力 |
+| `pipeline.steps.geometry` | 轮廓提取、中心线拟合、法线采样框架 | `frontal1_process_w.py`、`frontal1_process_rh.py`、`frontal2_process.py`、`frontal1_process_SelectSubArea.py` 中公共几何逻辑 | 已迁移并已验证 | 新模块抽离的是公共几何能力，不等于直接复刻旧脚本全部出图流程 |
+| `pipeline.steps.profiles` | 沿 section 抽取三维场剖面 bundle | `frontal1_process_w.py`、`frontal1_process_rh.py`、`frontal2_process.py` 中剖面抽样逻辑 | 已迁移并已验证 | 模块接口具备扩展性，但当前统一入口只验证 `rh` |
+| `pipeline.steps.subareas` | 按 section 之间关系筛选子区域 | `frontal1_process_SelectSubArea.py` | 已迁移并已验证 | 已形成独立函数接口和测试，但与 legacy 子区域命名、图件产物尚未完全统一 |
+| `pipeline.steps.statistics` | 掩膜均值与时序均值计算 | `merge_csv.py`、`merge_csv fengmian2.py` 的统计内核 | 已迁移并已验证 | 当前已迁入的是统计计算能力，不是 legacy 全套 CSV/绘图流程 |
+| 架构中的 `diagnostics` 模块边界 | 诊断量时序图、个例图、人工识别辅助图 | `frontal_info_graphic_identification.py`；`frontal_processing_CRA40.py` 中诊断图部分 | 已有模块边界但仍主要依赖 legacy | 分层设计文档已经定义了边界，但 `pipeline/steps/` 当前没有同名实现文件，产物仍主要来自旧脚本 |
+| 通用化 `runner` 总入口 | 跨数据源、跨锋面、跨变量的统一串联 | 多个 legacy 脚本组合关系 | 尚未迁移到新流水线总入口 | 当前 `runner` 只正式支持已验证的 `CRA40 front2 2017-06-22T18 rh` 链路 |
+
+映射时需要注意两点：
+
+1. 一个旧脚本往往同时包含几何、剖面、绘图、统计等多种职责，所以不能做“一脚本对一模块”的机械对应。
+2. 新流水线迁移的重点是“公共能力与可复用边界”，不是逐文件照搬旧工程。
+
+## 5. 已迁移能力与未迁移能力
+
+本项目当前必须明确区分三类状态，避免把“有代码骨架”误写成“已完成能力”。
+
+### 5.1 已迁移并已验证
+
+这类能力同时满足两个条件：已经有新模块实现，并且已有测试或真实案例链路验证。
+
+- `inventory` 的目录快照与环境检查
+- `masks` 对 `CRA40 front2` 既有掩膜资产的解析
+- `geometry` 的中心线拟合与 section 采样框架生成
+- `profiles` 的三维场剖面抽样接口
+- `subareas` 的子区域筛选
+- `statistics` 的掩膜均值计算
+- `runner` 对 `CRA40 front2 2017-06-22T18 rh` 链路的结构化串联
+
+当前这些已验证能力在第二阶段里可以被 gating 拆开看，但语义不会变成“能力消失”：
+
+- `completed`：对应步骤完成并产出结果
+- `partial`：主链路继续跑通，但可选分析链只完成了部分步骤
+- `skipped`：对应步骤被关闭，没有执行，因此只保留固定摘要结构
+
+已验证的现阶段边界应理解为：
+
+- 可以把当前最小案例以新模块方式串起来
+- 可以返回几何、剖面、子区域、统计摘要
+- 不应外推为“所有锋面、所有数据源、所有变量都已验证”
+
+### 5.2 已有模块边界但仍主要依赖 legacy
+
+这类能力已经在架构文档中有明确位置，甚至已有部分相关资产，但当前主要结果仍来自旧脚本，或者新流水线尚未形成等价入口。
+
+- `diagnostics`：分层设计已经定义其职责，但当前诊断图、人工识别辅助图仍主要依赖 `frontal_info_graphic_identification.py` 与 `frontal_processing_CRA40.py`
+- 统计类 legacy 产物输出：新流水线已有均值计算接口，但 `merge_csv.py`、`merge_csv fengmian2.py` 产生的 legacy 图件仍是当前可直接对照的主要结果
+- 掩膜命名与产物规范：新流水线已经能消费现有掩膜，但像 `offset1.nc`、`area2_lonlat_0622T18.nc` 这类 legacy 风格命名仍在沿用
+
+这一类能力不能写成“已全部迁移完成”，因为当前仍明显依赖旧脚本产物、旧命名或旧绘图流程。
+
+### 5.3 尚未迁移到新流水线总入口
+
+这类能力要么尚未进入 `runner`，要么尚未被证明能在统一入口下稳定工作。
+
+- front1 的统一串联入口
+- ERA5 的统一串联入口
+- `rh` 之外变量在 `runner` 中的正式支持，例如 `temp / w / thetae`
+- 诊断图自动串联与落盘
+- 多案例批处理与批量调度
+- 完整中间文件体系和统一 manifest/落盘规范
+
+这一类能力即使在旧工程里“能跑”，也不能在新流水线文档中写成“已完成迁移”，因为它们还没有进入当前受支持的新总入口边界。
+
+## 6. 后续扩展接入建议
+
+后续扩展应遵循“先补模块边界，再补统一入口”的顺序，不建议直接在 `runner` 中堆分支。
+
+### 6.1 扩展新的变量
+
+建议入口：
+
+- 先扩展 `profiles` 与 `statistics` 的变量读取和验证基线
+- 待单变量在真实案例中稳定后，再进入 `runner`
+
+不建议直接做的事：
+
+- 在没有真实基线前，把 `temp / w / thetae` 一次性并入统一入口
+
+### 6.2 扩展 front1
+
+建议入口：
+
+- 优先补 `masks` 资产解析规则
+- 再验证 `geometry / profiles / subareas / statistics` 在 front1 掩膜上的行为
+- 最后才扩 `runner` 的支持边界
+
+原因：
+
+- 当前 `masks` 明确限制在 `front2`
+- front1 是否与现有 section 划分参数兼容，仍需要独立验证
+
+### 6.3 扩展 ERA5
+
+建议入口：
+
+- 先在 step 层验证数据读取、坐标对齐、剖面抽样
+- 只有当 ERA5 有独立真实案例基线后，才考虑进入统一入口
+
+原因：
+
+- 旧工程中 ERA5 相关脚本能跑，不等于当前新入口已经具备同等支持
+
+### 6.4 补齐 diagnostics
+
+建议入口：
+
+- 先把 `diagnostics` 作为独立 step 落地
+- 明确它的输入、输出和与人工识别流程的关系
+- 之后再考虑是否纳入 `runner`
+
+原因：
+
+- 诊断图往往既是科研判读资产，也是维护排障资产
+- 它与当前“只返回摘要”的 runner 目标并不完全相同
+
+### 6.5 规范化产物命名与落盘
+
+建议入口：
+
+- 先在 `core/paths.py` 与写出层统一命名规范
+- 再逐步替换 legacy 风格文件名
+
+原因：
+
+- 当前很多结果虽然能消费，但命名仍保留历史语义
+- 如果先改入口、不改命名，后续排障会更难追溯
+
+## 7. 与现有文档的使用顺序
+
+建议把现有文档按“先理解架构，再理解旧基线，最后按需运行”的顺序使用。
+
+### 7.1 第一步：看分层设计
+
+先读 [`docs/2026-07-05-layered-pipeline-design.md`](/H:/邢台观测站/CWR_project/meiyu_new/docs/2026-07-05-layered-pipeline-design.md)。
+
+用途：
+
+- 理解为什么要按研究流程而不是按旧脚本文件名拆模块
+- 理解 `inventory / diagnostics / masks / geometry / profiles / subareas / statistics` 这些边界从何而来
+
+### 7.2 第二步：看本文档
+
+再读本文档 [`docs/pipeline_architecture_mapping_zh.md`](/H:/邢台观测站/CWR_project/meiyu_new/docs/pipeline_architecture_mapping_zh.md)。
+
+用途：
+
+- 理解“新模块对应旧脚本哪里”
+- 理解“三类迁移状态”边界
+- 判断某项能力现在应去查新模块、旧脚本，还是仍需手工对照
+
+### 7.3 第三步：看 legacy 冒烟基线
+
+然后读 [`docs/legacy_project_smoke_status_2026-07-05.md`](/H:/邢台观测站/CWR_project/meiyu_new/docs/legacy_project_smoke_status_2026-07-05.md)。
+
+用途：
+
+- 查清哪些旧脚本已跑通
+- 查清当前仍有效的 legacy 产物和兼容性前提
+- 给新流水线结果做人工对照
+
+### 7.4 第四步：最后看快速使用指南
+
+只有在准备实际运行时，再读 [`docs/pipeline_quickstart_zh.md`](/H:/邢台观测站/CWR_project/meiyu_new/docs/pipeline_quickstart_zh.md)。
+
+用途：
+
+- 获取最小案例的运行方法
+- 查看数据准备、命令示例与常见问题
+
+注意：
+
+- 快速使用指南是“如何运行”的文档，不是“迁移状态裁定”的权威来源
+- 如果它与当前代码实现出现时效差异，应优先以当前 `pipeline/steps/`、`pipeline/runner.py` 和对应测试为准
+
+## 8. 一句话结论
+
+当前新流水线已经完成了“围绕已验证 CRA40 front2 个例的可复用 step 模块化”和“受限 runner 串联入口”，但还没有完成 diagnostics、front1、ERA5、多变量与通用总入口的整体迁移。维护与扩展时，必须始终按“已迁移并已验证”“已有模块边界但仍主要依赖 legacy”“尚未迁移到新流水线总入口”这三类状态来判断，不要把未验证能力写成已完成能力。

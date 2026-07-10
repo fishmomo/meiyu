@@ -1,0 +1,9 @@
+case_name: cra40_front2_2017-06-22T18
+dataset: cra40
+front_id: front2
+target_time: 2017-06-22T18
+profile_variables:
+  - rh
+  - temp
+  - w
+  - thetae
