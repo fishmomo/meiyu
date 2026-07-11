@@ -224,5 +224,64 @@
 conda run -n cwr_py312 python -m pytest tests/ -v
 ```
 
-结果：**`67 passed, 1 warning, 3 subtests passed`**
+结果：**`70 passed, 1 warning, 3 subtests passed`**
+
+---
+
+# Agent 工作日志（2026-07-10 下第二段）
+
+> 完成"文档同步 → 代码改进 → ERA5 front1 → 批处理 → CSV 导出"全部待完善项。
+
+## 工作内容四：文档同步
+
+| 文件 | 修正内容 |
+|------|----------|
+| `agent_collaboration_guide_zh.md` | 数据源从"主支持 CRA40"→"CRA40 + ERA5"；时次限制从"仅 06-22T18"→"多时次"；新增 ERA5 字段名映射 |
+| `README.md` | 已验证案例从 2 个→6 个表格 |
+| `pipeline_architecture_mapping_zh.md` | runner/ERA5/diagnostics 迁移状态从"尚未完成"→"已完成" |
+
+## 工作内容五：代码改进
+
+| 改进 | 文件 | 说明 |
+|------|------|------|
+| diagnostics hPa 标签 | `pipeline/steps/profiles.py` | `ProfileBundle.levels` 新增字段；`write_front_diagnostics` Y 轴从 Level index 改为 hPa 并翻转 |
+| ERA5 profile 测试 | `tests/test_profiles_step.py` | 新增 `test_read_era5_profile_cube_uses_mapped_field_and_selects_time`（mock 验证 sel 路径） |
+
+提交：`4143f8c`
+
+## 工作内容六：ERA5 front1 + 批处理 + CSV 导出
+
+| 功能 | 改动 |
+|------|------|
+| ERA5 front1 manifest | 新增 `manifests/cases/era5_front1_20170622T18.yml`，真实冒烟通过 |
+| 批处理 CLI | `runner.py` `--manifest` 改为 `nargs='+'`，支持多 manifest 一次运行 |
+| CSV 导出 | `statistics.py` 新增 `write_statistics_csv`，runner 自动调用落到 `outputs/figures/<case>/statistics/` |
+
+新增测试：
+- `test_write_statistics_csv_writes_file_and_round_trips`
+- `test_runner_main_processes_multiple_manifests`
+
+提交：`b3c574a`
+
+---
+
+## 最终全量测试
+
+```bash
+conda run -n cwr_py312 python -m pytest tests/ -v
+```
+
+结果：**`70 passed, 1 warning, 3 subtests passed`**
+
+## 最终提交清单（本轮共计 7 个提交）
+
+| 提交 | 信息 |
+|------|------|
+| `650c53f` | `feat: extend runner to support multiple times for front1 and front2` |
+| `85f274e` | `feat: add era5 dataset support to runner pipeline` |
+| `040ff81` | `feat: add geometry and statistics diagnostic plots` |
+| `2fb556a` | `docs: update project status and work log` |
+| `4143f8c` | `fix: use hPa labels in diagnostics, add era5 profile test, sync stale docs` |
+| `b3c574a` | `feat: add batch runner, CSV export, and era5 front1 manifest` |
+
 

@@ -31,6 +31,7 @@ conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/era5
 | `cra40_front1_20170622T12.yml` | CRA40 | front1 | 2017-06-22T12 | rh, temp, w |
 | `cra40_front2_20170623T00.yml` | CRA40 | front2 | 2017-06-23T00 | rh |
 | `era5_front2_20170622T18.yml` | ERA5 | front2 | 2017-06-22T18 | rh, temp, w |
+| `era5_front1_20170622T18.yml` | ERA5 | front1 | 2017-06-22T18 | rh, temp, w |
 
 更完整的命令行示例和 IDE 用法说明，见 [docs/pipeline_quickstart_zh.md](docs/pipeline_quickstart_zh.md)。
 
