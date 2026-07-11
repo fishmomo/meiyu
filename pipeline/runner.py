@@ -20,6 +20,8 @@ from pipeline.steps.inventory import build_inventory_report
 from pipeline.steps.masks import resolve_case_masks
 from pipeline.steps.profiles import build_profile_bundle_from_field
 from pipeline.steps.diagnostics import write_front_diagnostics
+from pipeline.steps.diagnostics import write_geometry_diagnostics
+from pipeline.steps.diagnostics import write_statistics_diagnostics
 from pipeline.steps.statistics import build_masked_mean
 from pipeline.steps.subareas import build_subarea_mask
 
@@ -327,12 +329,27 @@ def run_case(cfg) -> dict[str, object]:
         statistics_summary = _skipped_summary()
 
     diagnostics_enabled = _is_step_enabled(cfg, "diagnostics")
-    if diagnostics_enabled and profiles_enabled and profile_bundle_cache:
-        figure_paths = write_front_diagnostics(
+    if diagnostics_enabled:
+        figure_paths: list[str] = []
+        figure_paths += write_geometry_diagnostics(
             cfg.case_name,
             output_dirs["diagnostics"],
             geometry,
-            profile_bundle_cache,
+            mask_bool,
+            lons,
+            lats,
+        )
+        if profiles_enabled and profile_bundle_cache:
+            figure_paths += write_front_diagnostics(
+                cfg.case_name,
+                output_dirs["diagnostics"],
+                geometry,
+                profile_bundle_cache,
+                statistics_summary,
+            )
+        figure_paths += write_statistics_diagnostics(
+            cfg.case_name,
+            output_dirs["diagnostics"],
             statistics_summary,
         )
         diagnostics_summary = {"enabled": True, "status": "completed", "files": figure_paths}
