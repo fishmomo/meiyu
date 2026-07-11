@@ -23,6 +23,7 @@ from pipeline.steps.diagnostics import write_front_diagnostics
 from pipeline.steps.diagnostics import write_geometry_diagnostics
 from pipeline.steps.diagnostics import write_statistics_diagnostics
 from pipeline.steps.statistics import build_masked_mean
+from pipeline.steps.statistics import write_statistics_csv
 from pipeline.steps.subareas import build_subarea_mask
 
 
@@ -201,20 +202,24 @@ def main(argv: list[str] | None = None) -> int:
         parser = _CliArgumentParser(
             description="Run the verified Meiyu pipeline case",
         )
-        parser.add_argument("--manifest", required=True)
+        parser.add_argument("--manifest", required=True, nargs="+")
         parser.add_argument("--override", action="append", default=[])
         args = parser.parse_args(argv)
 
         overrides = _parse_override_pairs(args.override)
-        summary = run_case_from_manifest(
-            Path(args.manifest),
-            overrides=overrides,
-        )
+        summaries = []
+        for manifest_path in args.manifest:
+            summaries.append(
+                run_case_from_manifest(
+                    Path(manifest_path),
+                    overrides=overrides,
+                )
+            )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    print(json.dumps(summaries, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -328,6 +333,14 @@ def run_case(cfg) -> dict[str, object]:
     else:
         statistics_summary = _skipped_summary()
 
+    csv_path = ""
+    if statistics_enabled:
+        csv_path = write_statistics_csv(
+            output_dirs["statistics"],
+            cfg.case_name,
+            statistics_summary,
+        )
+
     diagnostics_enabled = _is_step_enabled(cfg, "diagnostics")
     if diagnostics_enabled:
         figure_paths: list[str] = []
@@ -352,6 +365,8 @@ def run_case(cfg) -> dict[str, object]:
             output_dirs["diagnostics"],
             statistics_summary,
         )
+        if csv_path:
+            figure_paths.append(csv_path)
         diagnostics_summary = {"enabled": True, "status": "completed", "files": figure_paths}
     else:
         diagnostics_summary = _skipped_summary()

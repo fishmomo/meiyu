@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -57,6 +59,31 @@ class StatisticsStepTest(unittest.TestCase):
             build_masked_series("rh", field_series, mask),
             np.array([2.0, 4.0]),
         )
+
+    def test_write_statistics_csv_writes_file_and_round_trips(self) -> None:
+        from pipeline.steps.statistics import write_statistics_csv
+
+        tmp_dir = Path(tempfile.mkdtemp())
+        try:
+            path = write_statistics_csv(
+                tmp_dir,
+                "test_case",
+                {
+                    "variables": {
+                        "rh": {"front_mean": 85.0, "subarea_mean": 87.0},
+                        "temp": {"front_mean": 295.0, "subarea_mean": 296.0},
+                    }
+                },
+            )
+            self.assertTrue(Path(path).exists())
+            self.assertTrue(str(path).endswith(".csv"))
+            content = Path(path).read_text(encoding="utf-8")
+            self.assertIn("variable,front_mean,subarea_mean", content)
+            self.assertIn("rh,85.0,87.0", content)
+            self.assertIn("temp,295.0,296.0", content)
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

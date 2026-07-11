@@ -35,8 +35,10 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(summary["statistics"]["status"], "completed")
         self.assertEqual(summary["diagnostics"]["status"], "completed")
         self.assertGreaterEqual(len(summary["diagnostics"]["files"]), 1)
-        for fpath in summary["diagnostics"]["files"]:
-            self.assertTrue(str(fpath).endswith(".png"))
+        png_files = [f for f in summary["diagnostics"]["files"] if str(f).endswith(".png")]
+        self.assertGreaterEqual(len(png_files), 2)
+        for fpath in png_files:
+            self.assertTrue(Path(fpath).exists())
 
     def test_run_case_from_front1_manifest_returns_multivariable_summary(self) -> None:
         from pipeline.runner import run_case_from_manifest
@@ -217,8 +219,9 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(stderr.getvalue(), "")
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["case_name"], "验证用例")
-        self.assertEqual(payload["statistics"]["status"], "completed")
+        self.assertIsInstance(payload, list)
+        self.assertEqual(payload[0]["case_name"], "验证用例")
+        self.assertEqual(payload[0]["statistics"]["status"], "completed")
         self.assertNotIn("\\u9a8c\\u8bc1", stdout.getvalue())
 
     def test_runner_main_applies_cli_overrides(self) -> None:
@@ -251,7 +254,8 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(stderr.getvalue(), "")
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["case_name"], "验证用例")
+        self.assertIsInstance(payload, list)
+        self.assertEqual(payload[0]["case_name"], "验证用例")
         mocked.assert_called_once()
         _, kwargs = mocked.call_args
         self.assertEqual(
@@ -351,8 +355,42 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(result.stderr, "")
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["case_name"], "cra40_front2_20170622T18")
-        self.assertEqual(payload["statistics"]["status"], "completed")
+        self.assertIsInstance(payload, list)
+        self.assertEqual(payload[0]["case_name"], "cra40_front2_20170622T18")
+        self.assertEqual(payload[0]["statistics"]["status"], "completed")
+
+    def test_runner_main_processes_multiple_manifests(self) -> None:
+        from contextlib import redirect_stderr, redirect_stdout
+        from io import StringIO
+
+        import pipeline.runner as runner
+
+        stdout = StringIO()
+        stderr = StringIO()
+        fake_a = {"case_name": "case_a"}
+        fake_b = {"case_name": "case_b"}
+
+        def side_effect(path, overrides=None):
+            if "case_a" in str(path):
+                return fake_a
+            return fake_b
+
+        with patch.object(runner, "run_case_from_manifest", side_effect=side_effect):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = runner.main(
+                    [
+                        "--manifest",
+                        "manifests/cases/case_a.yml",
+                        "manifests/cases/case_b.yml",
+                    ]
+                )
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertIsInstance(payload, list)
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(payload[0]["case_name"], "case_a")
+        self.assertEqual(payload[1]["case_name"], "case_b")
 
 
 if __name__ == "__main__":
