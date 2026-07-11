@@ -32,12 +32,18 @@ def write_front_diagnostics(
 
     for ax, (var_name, bundle) in zip(axes.flat, profile_bundles.items()):
         data = bundle.values.mean(axis=1)
-        levels = np.arange(data.shape[1])
+        if len(bundle.levels) > 0 and len(bundle.levels) == data.shape[1]:
+            level_labels = bundle.levels
+            ylabel = "Pressure Level (hPa)"
+        else:
+            level_labels = np.arange(data.shape[1])
+            ylabel = "Level index"
         sections = np.arange(data.shape[0])
-        cf = ax.contourf(sections, levels, data.T, levels=20, cmap="RdBu_r")
+        cf = ax.contourf(sections, level_labels, data.T, levels=20, cmap="RdBu_r")
         ax.set_title(f"{var_name.upper()} Profile")
         ax.set_xlabel("Section")
-        ax.set_ylabel("Level index")
+        ax.set_ylabel(ylabel)
+        ax.invert_yaxis()
         fig.colorbar(cf, ax=ax)
 
     figure_path = output_dir / f"{case_name}_profiles_overview.png"

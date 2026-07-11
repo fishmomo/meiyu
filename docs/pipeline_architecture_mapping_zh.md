@@ -68,8 +68,10 @@ pipeline/
 
 - `CRA40 + front2 + 2017-06-22T18 + rh`
 - `CRA40 + front1 + 2017-06-22T18 + rh / temp / w`
+- 支持更多时次（基于掩膜资产存在性验证）
+- `ERA5 + front2 + 2017-06-22T18 + rh / temp / w`
 
-这意味着当前新流水线已经围绕 `front1 V1` 和多变量做了保守桥接扩展，但还没有泛化到 ERA5、更多时次、批量运行或通用诊断图总控。
+这意味着当前新流水线已完成 front1/front2 多时次扩展、ERA5 接入和 diagnostics 图件扩展，但还没有泛化到批量调度。
 
 第二阶段的边界需要按“基础链 / 可选分析链”来理解：
 
@@ -343,4 +345,4 @@ pipeline/
 
 ## 8. 一句话结论
 
-当前新流水线已经完成了“围绕已验证 CRA40 front2 个例的可复用 step 模块化”和“front1 V1 多变量保守桥接扩展”。`front1 V1`（`CRA40 + 2017-06-22T18 + rh/temp/w`）已经具备 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics` 的完整串联能力。尚未完成的是 ERA5 统一入口、更多时次批量支持、diagnostics 完整图件总调度和通用总入口。维护与扩展时，必须始终按“已迁移并已验证”“已有模块边界但仍主要依赖 legacy”“尚未迁移到新流水线总入口”这三类状态来判断，不要把未验证能力写成已完成能力。
+当前新流水线已完成 CRA40/ERA5 双源、front1/front2 双锋面、多时次、多变量、三类 diagnostics 图件的完整串联。尚未完成：ERA5 front1 覆盖、批量多案例调度、legacy 产物全面对齐。

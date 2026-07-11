@@ -160,5 +160,63 @@ class ProfilesStepTest(unittest.TestCase):
         )
 
 
+    def test_read_era5_profile_cube_uses_mapped_field_and_selects_time(self) -> None:
+        from pipeline.core.era5_fields import read_era5_profile_cube
+
+        lats = np.array([30.0, 31.0])
+        lons = np.array([100.0, 101.0])
+        levels = np.array([1000.0, 900.0, 800.0])
+        field = np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2)
+
+        class FakeArray:
+            def __init__(self, values, recorder=None):
+                self.values = values
+                self.recorder = recorder if recorder is not None else self
+
+            def sel(self, *args, **kwargs):
+                if args:
+                    kwargs.update(args[0] if isinstance(args[0], dict) else {})
+                if "valid_time" in kwargs:
+                    self.recorder.time_sel = kwargs
+                else:
+                    self.recorder.space_sel = kwargs
+                return self
+
+        class FakeDataset:
+            def __init__(self):
+                recorder = self
+                self.arrays = {
+                    "t": FakeArray(field, recorder=recorder),
+                    "pressure_level": FakeArray(levels, recorder=recorder),
+                }
+                self.time_sel = None
+                self.space_sel = None
+
+            def __getitem__(self, key):
+                return self.arrays[key]
+
+        fake_ds = FakeDataset()
+
+        with patch(
+            "pipeline.core.era5_fields.open_dataset_compat",
+            return_value=fake_ds,
+        ):
+            cube, resolved_levels = read_era5_profile_cube(
+                "temp",
+                Path("dummy.nc"),
+                "2017-06-22T18",
+                lats,
+                lons,
+            )
+
+        self.assertEqual(cube.shape, field.shape)
+        np.testing.assert_array_equal(resolved_levels, levels)
+        self.assertIn("valid_time", fake_ds.time_sel)
+        self.assertEqual(
+            fake_ds.space_sel,
+            {"latitude": lats, "longitude": lons, "method": "nearest"},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

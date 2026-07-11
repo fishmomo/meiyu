@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -10,6 +10,7 @@ from pipeline.steps.geometry import GeometryResult
 class ProfileBundle:
     variable: str
     values: np.ndarray
+    levels: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
 
 
 def build_profile_bundle(variable: str, profiles: list[np.ndarray]) -> ProfileBundle:
@@ -33,4 +34,4 @@ def build_profile_bundle_from_field(
         sample_x,
         sample_y,
     )
-    return ProfileBundle(variable=variable, values=sampled_profiles)
+    return ProfileBundle(variable=variable, values=sampled_profiles, levels=levels)
