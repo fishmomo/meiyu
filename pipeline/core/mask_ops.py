@@ -1,7 +1,12 @@
 from pathlib import Path
 
 from pipeline.core.time_utils import cra40_front2_subarea_time_token
-from project_paths import cra40_front_extend, cra40_front_mask, cra40_front2_subarea
+from project_paths import (
+    cra40_front_extend,
+    cra40_front_mask,
+    cra40_front2_subarea,
+    era5_front_mask,
+)
 
 
 def _require_existing(path: str) -> str:
@@ -28,3 +33,15 @@ def existing_cra40_front2_mask_assets(target_time: str) -> dict[str, str]:
     if Path(subarea_path).exists():
         assets["subarea_mask"] = subarea_path
     return assets
+
+
+def existing_era5_front1_mask_assets(target_time: str) -> dict[str, str]:
+    return {
+        "front_mask": _require_existing(era5_front_mask(1, target_time)),
+    }
+
+
+def existing_era5_front2_mask_assets(target_time: str) -> dict[str, str]:
+    return {
+        "front_mask": _require_existing(era5_front_mask(2, target_time)),
+    }

@@ -11,6 +11,8 @@ import numpy as np
 from nc_compat import open_dataset_compat
 from pipeline.core.cra40_fields import read_cra40_profile_cube
 from pipeline.core.cra40_fields import resolve_cra40_profile_input
+from pipeline.core.era5_fields import read_era5_profile_cube
+from pipeline.core.era5_fields import resolve_era5_profile_input
 from pipeline.core.paths import ensure_case_dirs
 from pipeline.manifest_loader import build_runtime_config
 from pipeline.steps.geometry import build_geometry_from_mask
@@ -23,18 +25,18 @@ from pipeline.steps.subareas import build_subarea_mask
 
 
 def _validate_supported_case(cfg) -> None:
-    if cfg.dataset != "cra40":
-        raise ValueError("runner only supports CRA40 dataset in this version")
+    if cfg.dataset not in ("cra40", "era5"):
+        raise ValueError("runner only supports CRA40 or ERA5 dataset in this version")
     if cfg.front_id not in ("front1", "front2"):
         raise ValueError("runner only supports front1/front2 in this version")
     try:
-        masks = resolve_case_masks(cfg.front_id, cfg.target_time)
+        masks = resolve_case_masks(cfg.front_id, cfg.target_time, dataset=cfg.dataset)
     except (FileNotFoundError, ValueError) as exc:
         raise ValueError(
-            f"no mask assets found for {cfg.front_id} at {cfg.target_time}: {exc}"
+            f"no mask assets found for {cfg.dataset} {cfg.front_id} at {cfg.target_time}: {exc}"
         ) from exc
     if not masks:
-        raise ValueError(f"no mask assets found for {cfg.front_id} at {cfg.target_time}")
+        raise ValueError(f"no mask assets found for {cfg.dataset} {cfg.front_id} at {cfg.target_time}")
     profile_variables = _get_profile_variables(cfg)
     if cfg.front_id == "front2" and "rh" not in profile_variables:
         raise ValueError("front2 requires at least 'rh' profile variable")
@@ -89,6 +91,8 @@ def _get_profile_input_path(cfg: Any, variable: str) -> Path:
             )
         return Path(resolved_inputs[variable])
 
+    if cfg.dataset == "era5":
+        return resolve_era5_profile_input(variable)
     return resolve_cra40_profile_input(variable, cfg.target_time)
 
 
@@ -218,7 +222,7 @@ def run_case(cfg) -> dict[str, object]:
 
     output_dirs = ensure_case_dirs(cfg.case_name)
     inventory = build_inventory_report()
-    masks = resolve_case_masks(cfg.front_id, cfg.target_time)
+    masks = resolve_case_masks(cfg.front_id, cfg.target_time, dataset=cfg.dataset)
 
     mask_bool, lons, lats = _load_bool_mask(masks["front_mask"])
     geometry = build_geometry_from_mask(
@@ -242,12 +246,21 @@ def run_case(cfg) -> dict[str, object]:
     if profiles_enabled or statistics_enabled:
         for variable in profile_variables:
             input_path = _get_profile_input_path(cfg, variable)
-            field_cache[variable] = read_cra40_profile_cube(
-                variable,
-                input_path,
-                lats,
-                lons,
-            )
+            if cfg.dataset == "era5":
+                field_cache[variable] = read_era5_profile_cube(
+                    variable,
+                    input_path,
+                    cfg.target_time,
+                    lats,
+                    lons,
+                )
+            else:
+                field_cache[variable] = read_cra40_profile_cube(
+                    variable,
+                    input_path,
+                    lats,
+                    lons,
+                )
 
     profile_bundle_cache: dict[str, object] = {}
     if profiles_enabled:

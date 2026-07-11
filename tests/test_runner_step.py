@@ -171,7 +171,7 @@ class RunnerStepTest(unittest.TestCase):
             bad_cfg.dataset = "not-cra40"
             with self.assertRaisesRegex(
                 ValueError,
-                "runner only supports CRA40 dataset",
+                "runner only supports CRA40 or ERA5 dataset",
             ):
                 run_case(bad_cfg)
 
