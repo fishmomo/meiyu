@@ -8,6 +8,7 @@ from pipeline.core.cra40_fields import CRA40_PROFILE_SPECS
 from pipeline.core.cra40_fields import build_cra40_filename
 from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.manifest_models import (
+    ManifestDiagnosticsParams,
     ManifestGeometryParams,
     ManifestInputRef,
     ManifestProfilesParams,
@@ -27,6 +28,7 @@ ALLOWED_OVERRIDE_KEYS = {
     "params.subareas.start_section",
     "params.subareas.end_section",
     "params.profiles.variables",
+    "params.diagnostics.level_hpa",
 }
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +59,13 @@ def load_manifest(path: Path) -> ManifestSpec:
             )
         ),
         subareas=ManifestSubareasParams(**parsed["params"]["subareas"]),
+        diagnostics=ManifestDiagnosticsParams(
+            level_hpa=float(
+                parsed.get("params", {})
+                .get("diagnostics", {})
+                .get("level_hpa", 850.0)
+            )
+        ),
         inputs={
             key: ManifestInputRef(
                 logical_name=value.get("logical_name"),
@@ -97,6 +106,9 @@ def build_runtime_config(
             )
         ),
         subareas=ManifestSubareasParams(**data["params"]["subareas"]),
+        diagnostics=ManifestDiagnosticsParams(
+            level_hpa=float(data["params"]["diagnostics"]["level_hpa"])
+        ),
         resolved_inputs=resolved_inputs,
     )
 
@@ -130,6 +142,9 @@ def _manifest_to_mutable_dict(manifest: ManifestSpec) -> dict[str, Any]:
             "subareas": {
                 "start_section": manifest.subareas.start_section,
                 "end_section": manifest.subareas.end_section,
+            },
+            "diagnostics": {
+                "level_hpa": manifest.diagnostics.level_hpa,
             },
         },
     }

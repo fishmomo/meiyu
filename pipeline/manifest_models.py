@@ -29,6 +29,11 @@ class ManifestSubareasParams:
 
 
 @dataclass(slots=True)
+class ManifestDiagnosticsParams:
+    level_hpa: float = 850.0
+
+
+@dataclass(slots=True)
 class ManifestSpec:
     case_name: str
     dataset: str
@@ -38,6 +43,7 @@ class ManifestSpec:
     geometry: ManifestGeometryParams
     profiles: ManifestProfilesParams
     subareas: ManifestSubareasParams
+    diagnostics: ManifestDiagnosticsParams
     inputs: dict[str, ManifestInputRef]
 
 
@@ -51,4 +57,5 @@ class RunnerRuntimeConfig:
     geometry: ManifestGeometryParams
     profiles: ManifestProfilesParams
     subareas: ManifestSubareasParams
+    diagnostics: ManifestDiagnosticsParams
     resolved_inputs: dict[str, str]

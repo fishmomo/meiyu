@@ -69,15 +69,14 @@
 | `pipeline.steps.profiles` | `frontal1_process_rh.py`、`frontal1_process_w.py`、`frontal2_process.py` 中剖面抽样逻辑 | 已迁移 |
 | `pipeline.steps.subareas` | `frontal1_process_SelectSubArea.py` 中子区域筛选逻辑 | 已迁移 |
 | `pipeline.steps.statistics` | `merge_csv.py`、`merge_csv fengmian2.py` 的掩膜平均统计内核 | 已迁移 |
-| `pipeline.runner` | 以上模块的受限统一入口 | 已形成最小可用链路 |
+| `pipeline.runner` | 以上模块的 manifest 驱动统一入口 | 已支持已验证案例串联、diagnostics、CSV 导出与多 manifest 批量运行 |
 
 尚未整体迁入 `pipeline/` 的，主要包括：
 
-- diagnostics 图件总调度
-- front1 统一入口
-- ERA5 统一入口
-- 多变量正式 runner 支持
-- 旧脚本中的完整出图命名、批处理和结果组织
+- legacy 中更完整的出图命名和结果组织约定
+- 连续帧、组合剖面、人工识别辅助图等更复杂 diagnostics
+- 多时次统计分析深化，如时序均值和跨锋面对比
+- 更大范围 ERA5 时次覆盖
 
 ## 5. 现在应该怎么用
 

@@ -15,14 +15,17 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import xarray as xr
 
 
-TMP_ROOT = Path(tempfile.gettempdir()) / "meiyu_new_xarray_cache"
+# Keep full temporary NetCDF copies off the system drive.  The workspace path
+# contains Chinese characters, whereas the drive-root staging path is ASCII and
+# remains compatible with cfgrib/netCDF backends on Windows.
+_DEFAULT_TMP_ROOT = Path(Path(__file__).resolve().anchor) / "meiyu_new_xarray_cache"
+TMP_ROOT = Path(os.environ.get("MEIYU_NEW_XARRAY_CACHE", str(_DEFAULT_TMP_ROOT)))
 TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 GRIB_SUFFIXES = {".grib", ".grib2", ".grb", ".grb2"}
@@ -54,11 +57,17 @@ def stage_input_path(path_like: os.PathLike[str] | str) -> str:
 
     src_stat = path.stat()
     if not staged.exists():
-        shutil.copy2(path, staged)
+        part = staged.with_suffix(f"{staged.suffix}.part")
+        part.unlink(missing_ok=True)
+        shutil.copy2(path, part)
+        part.replace(staged)
     else:
         dst_stat = staged.stat()
         if dst_stat.st_size != src_stat.st_size or dst_stat.st_mtime < src_stat.st_mtime:
-            shutil.copy2(path, staged)
+            part = staged.with_suffix(f"{staged.suffix}.part")
+            part.unlink(missing_ok=True)
+            shutil.copy2(path, part)
+            part.replace(staged)
     return str(staged)
 
 
@@ -86,6 +95,11 @@ def to_netcdf_compat(ds: xr.Dataset, path_like: os.PathLike[str] | str, **kwargs
 
     staged = _staged_name(path)
     staged.parent.mkdir(parents=True, exist_ok=True)
-    result = ds.to_netcdf(staged, **kwargs)
-    shutil.copy2(staged, path)
-    return result
+    try:
+        result = ds.to_netcdf(staged, **kwargs)
+        shutil.copy2(staged, path)
+        return result
+    finally:
+        # Output staging is transient.  Keeping one full NetCDF copy per
+        # cropped GRIB on C: can exhaust the system drive during batch jobs.
+        staged.unlink(missing_ok=True)

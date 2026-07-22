@@ -59,6 +59,106 @@ class RunnerStepTest(unittest.TestCase):
         self.assertEqual(summary["diagnostics"]["status"], "completed")
         self.assertGreaterEqual(len(summary["diagnostics"]["files"]), 1)
 
+    def test_cra40_multivariable_case_writes_research_diagnostics(self) -> None:
+        from pipeline.runner import run_case_from_manifest
+
+        summary = run_case_from_manifest(
+            Path("manifests/cases/cra40_front2_20170628T18.yml")
+        )
+
+        diagnostic_names = {
+            Path(path).name for path in summary["diagnostics"]["files"]
+        }
+        expected_names = {
+            "cra40_front2_20170628T18_thetae_gradient_mask_overlay.png",
+            "cra40_front2_20170628T18_precip_mask_overlay.png",
+            "cra40_front2_20170628T18_subarea_overlay.png",
+            "cra40_front2_20170628T18_sections_rh.png",
+            "cra40_front2_20170628T18_sections_temp.png",
+            "cra40_front2_20170628T18_sections_w.png",
+            "cra40_front2_20170628T18_sections_rh_thetae.png",
+            "cra40_front2_20170628T18_sections_w_thetae.png",
+        }
+        self.assertTrue(expected_names.issubset(diagnostic_names))
+        for path in summary["diagnostics"]["files"]:
+            if Path(path).name in expected_names:
+                self.assertTrue(Path(path).exists())
+
+    def test_era5_case_writes_signed_sections_and_dynamics(self) -> None:
+        from pipeline.runner import run_case_from_manifest
+
+        summary = run_case_from_manifest(
+            Path("manifests/cases/era5_front2_20170628T18.yml")
+        )
+
+        names = {Path(path).name for path in summary["diagnostics"]["files"]}
+        expected = {
+            "era5_front2_20170628T18_sections_rh_signed_km.png",
+            "era5_front2_20170628T18_sections_temp_signed_km.png",
+            "era5_front2_20170628T18_sections_w_signed_km.png",
+            "era5_front2_20170628T18_sections_rh_thetae_signed_km.png",
+            "era5_front2_20170628T18_sections_w_thetae_signed_km.png",
+            "era5_front2_20170628T18_850_thetae_gradient_wind.png",
+            "era5_front2_20170628T18_850_divergence.png",
+            "era5_front2_20170628T18_850_moisture_flux_convergence.png",
+            "era5_front2_20170628T18_850_frontogenesis.png",
+        }
+        self.assertTrue(expected.issubset(names))
+        self.assertEqual(summary["diagnostics"]["status"], "completed")
+        self.assertEqual(
+            summary["diagnostics"]["components"]["era5_dynamics"],
+            "completed",
+        )
+
+    def test_era5_dynamics_failure_reports_partial_without_losing_base_figures(
+        self,
+    ) -> None:
+        from pipeline.runner import run_case_from_manifest
+
+        with patch(
+            "pipeline.runner.read_era5_dynamics",
+            side_effect=ValueError("missing q"),
+        ):
+            summary = run_case_from_manifest(
+                Path("manifests/cases/era5_front2_20170628T18.yml")
+            )
+
+        self.assertEqual(summary["diagnostics"]["status"], "partial")
+        self.assertEqual(summary["diagnostics"]["components"]["base"], "completed")
+        self.assertEqual(
+            summary["diagnostics"]["components"]["era5_dynamics"],
+            "failed",
+        )
+        self.assertTrue(
+            any("missing q" in warning for warning in summary["diagnostics"]["warnings"])
+        )
+
+    def test_signed_section_failure_reports_partial_without_losing_base_figures(
+        self,
+    ) -> None:
+        from pipeline.runner import run_case_from_manifest
+
+        with patch(
+            "pipeline.runner.write_signed_section_diagnostics",
+            side_effect=ValueError("pressure levels differ"),
+        ):
+            summary = run_case_from_manifest(
+                Path("manifests/cases/era5_front2_20170628T18.yml")
+            )
+
+        self.assertEqual(summary["diagnostics"]["status"], "partial")
+        self.assertEqual(summary["diagnostics"]["components"]["base"], "completed")
+        self.assertEqual(
+            summary["diagnostics"]["components"]["signed_sections"],
+            "failed",
+        )
+        self.assertTrue(
+            any(
+                "pressure levels differ" in warning
+                for warning in summary["diagnostics"]["warnings"]
+            )
+        )
+
     def test_run_case_returns_summary_from_pipeline_config(self) -> None:
         from pipeline.config import load_case_config
         from pipeline.runner import run_case

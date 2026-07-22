@@ -1,0 +1,42 @@
+case_name: era5_front2_20170628T18
+dataset: era5
+front_id: front2
+target_time: 2017-06-28T18
+
+steps:
+  inventory: true
+  masks: true
+  geometry: true
+  profiles: true
+  subareas: true
+  statistics: true
+  diagnostics: true
+
+params:
+  geometry:
+    degree: 4
+    dense_points: 1000
+    n_sections: 8
+    distance: 1.0
+    n_points: 9
+    delta_x: 0.1
+  profiles:
+    variables:
+      - rh
+      - temp
+      - w
+  subareas:
+    start_section: 0
+    end_section: 2
+  diagnostics:
+    level_hpa: 850
+
+inputs:
+  dynamics:
+    relative_path: data/raw/era5/201706.nc
+  rh:
+    relative_path: data/raw/era5/ERA5_RH_201706.nc
+  temp:
+    relative_path: data/raw/era5/ERA5_tmp_201706.nc
+  w:
+    relative_path: data/raw/era5/ERA5_wdata_201706.nc

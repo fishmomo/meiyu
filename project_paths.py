@@ -40,11 +40,20 @@ def era5_file(filename: str) -> str:
 
 
 def cra40_glob(pattern: str) -> str:
-    return str(RAW_CRA40_DIR / pattern)
+    return str(RAW_CRA40_DIR / "**" / pattern)
 
 
 def cra40_file(filename: str) -> str:
-    return str(RAW_CRA40_DIR / filename)
+    direct_path = RAW_CRA40_DIR / filename
+    if direct_path.exists():
+        return str(direct_path)
+
+    matches = sorted(RAW_CRA40_DIR.rglob(filename))
+    if len(matches) == 1:
+        return str(matches[0])
+    if len(matches) > 1:
+        raise RuntimeError(f"multiple CRA40 files named {filename}: {matches}")
+    return str(direct_path)
 
 
 def era5_front_mask(front_no: int, dt: str) -> str:

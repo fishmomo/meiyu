@@ -12,8 +12,8 @@
 
 需要特别说明两点：
 
-1. 当前新流水线已经把 `mask -> geometry -> profiles -> subareas -> statistics` 这条主链路拆成了可复用模块。
-2. 当前的 [`pipeline/runner.py`](/H:/邢台观测站/CWR_project/meiyu_new/pipeline/runner.py) 已经可以串联当前已验证的最小链路，但它仍然不是通用科研总调度器。也就是说，现在可以先借它统一跑通 `CRA40 front2 2017-06-22T18`，但还不应该期待它已经覆盖 front1、ERA5、多变量和诊断图全流程。
+1. 当前新流水线已经把 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics` 这条主链路拆成了可复用模块。
+2. 当前的 [`pipeline/runner.py`](/H:/邢台观测站/CWR_project/meiyu_new/pipeline/runner.py) 已经可以串联已验证案例，支持 CRA40/ERA5、front1/front2、多变量（`rh / temp / w`）、diagnostics 图件、CSV 导出和多 manifest 批量运行。它仍然不是任意数据、任意变量、任意产物的通用科研总调度器；使用时应以 manifest 与项目内已有数据资产为边界。
 
 ## 2. 运行前准备
 
@@ -42,7 +42,7 @@ conda run -n cwr_py312 python -c "print('env ok')"
 
 ### 2.3 当前最小案例需要的关键数据
 
-本指南默认使用已经完成真实验证的案例：
+本指南默认先用一个最小 smoke 案例起步：
 
 - 数据集：`CRA40`
 - 锋面：`front2`
@@ -95,17 +95,23 @@ ds = xr.open_dataset("data/interim/manual_masks/cra40/front2/2017-06-22T18.nc")
 - `statistics`：基于主掩膜或子区域掩膜，对网格场做掩膜平均
 - `diagnostics`：基于剖面 bundle 产出最小研究辅助图件
 
-当前 `runner` 现在已经能做两层事情：
+当前 `runner` 现在已经能做三层事情：
 
 1. 基础层：
    读取配置、建立输出目录、生成 `inventory` 与 `masks` 摘要
 2. 串联层：
    对当前已验证案例继续执行 `geometry -> profiles -> subareas -> statistics -> diagnostics`
+3. 调度层：
+   支持单 manifest、多个 manifest 批量运行，以及有限的 `--override key=value` 临时参数覆盖
 
 已验证的完整案例包括：
 
 - `CRA40 + front2 + 2017-06-22T18 + rh`
 - `CRA40 + front1 + 2017-06-22T18 + rh / temp / w`
+- `CRA40 + front1 + 2017-06-22T12 + rh / temp / w`
+- `CRA40 + front2 + 2017-06-23T00 + rh`
+- `ERA5 + front2 + 2017-06-22T18 + rh / temp / w`
+- `ERA5 + front1 + 2017-06-22T18 + rh / temp / w`
 
 也就是说：
 
@@ -116,7 +122,7 @@ ds = xr.open_dataset("data/interim/manual_masks/cra40/front2/2017-06-22T18.nc")
 
 ### 命令行运行
 
-如果你已经有可用的 `cwr_py312` 环境，也可以直接从终端跑当前这条已验证链路。CLI 的真实入口是 `python -m pipeline.runner --manifest <path> [--override key=value]`，下面给 3 个最小例子：
+如果你已经有可用的 `cwr_py312` 环境，也可以直接从终端跑当前这条已验证链路。CLI 的真实入口是 `python -m pipeline.runner --manifest <path> [<path> ...] [--override key=value]`，下面给几个最小例子：
 
 ```powershell
 conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml
@@ -138,6 +144,12 @@ conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra4
 
 ```powershell
 conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front1_20170622T18.yml
+```
+
+批量运行多个 manifest：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/cra40_front2_20170622T18.yml manifests/cases/era5_front1_20170622T18.yml
 ```
 
 这条命令会输出 JSON，里面包含 `case_name`、`geometry`、`profiles`、`subareas`、`statistics` 和 `diagnostics` 等摘要字段。IDE 里如果想逐步看中间对象，继续用下面的 Python 方式最方便。
@@ -435,9 +447,9 @@ print(sub_mean)
 
 这一步不要偷懒直接复用“另一个网格上已经取好的场”。
 
-### 5.4 `runner` 能跑，但后面步骤不会自动继续
+### 5.4 `runner` 的支持边界
 
-这通常不是故障，而是当前版本的支持边界。
+`runner` 已经是当前推荐的自动化入口，但它的边界仍然是“项目内已有资产 + manifest 明确描述 + 当前已迁移 step 能表达的分析链”。
 
 `runner.py` 现在已经能串联当前已验证案例的：
 
@@ -447,21 +459,22 @@ print(sub_mean)
 - `profiles`
 - `subareas`
 - `statistics`
+- `diagnostics`
 
 第二阶段的语义是把基础链和分析链分开看：
 
 - `inventory / masks / geometry` 仍然是必跑基础链
-- `profiles / subareas / statistics` 属于可选分析链，是否执行由 `overrides` 和 step gating 控制
+- `profiles / subareas / statistics / diagnostics` 属于可选分析链，是否执行由 manifest、`overrides` 和 step gating 控制
 - 不管可选链是否关闭，顶层摘要 key 的结构保持不变，只是对应步骤的状态会落成 `completed / partial / skipped`
 
-但它仍然不是通用总控器。若你要继续做以下工作：
+它已经覆盖当前的 front1/front2、CRA40/ERA5、`rh / temp / w` 和 diagnostics 主流程；如果你要继续做以下工作，仍然需要先扩展 manifest、数据资产或 step 实现：
 
-- front1 统一入口
-- ERA5 统一入口
-- `rh` 之外变量的统一串联
-- diagnostics 自动化入口
+- 新数据集或新的变量类型
+- 尚未准备掩膜资产的新时次
+- legacy 中未迁移的完整出图命名和产物组织
+- 连续帧、组合剖面、人工识别辅助图等更复杂 diagnostics
 
-当前仍建议按模块方式扩展，而不是直接把所有需求塞进现有 `runner`。
+这类扩展建议先在 `pipeline/core/*` 或 `pipeline/steps/*` 里补清楚科学语义，再把稳定入口接入 `runner`。
 
 ## 6. 输出与后续定位
 
@@ -492,7 +505,30 @@ outputs/
 
 `diagnostics` 步骤已经能够自动落盘 PNG 图件到 `outputs/figures/<case_name>/diagnostics/`。
 
-### 6.3 哪些结果目前仍主要参考 legacy 输出
+### 6.3 标准化剖面与 ERA5 动力诊断
+
+完整运行 `era5_front2_20170628T18`：
+
+```powershell
+conda run -n cwr_py312 python -m pipeline.runner --manifest manifests/cases/era5_front2_20170628T18.yml
+```
+
+会在 `diagnostics/` 新增两组产品：
+
+- 标准化横跨锋面剖面：`sections_rh_signed_km`、`sections_temp_signed_km`、`sections_w_signed_km`、`sections_rh_thetae_signed_km`、`sections_w_thetae_signed_km`。
+- ERA5 850 hPa 动力图：`850_thetae_gradient_wind`、`850_divergence`、`850_moisture_flux_convergence`、`850_frontogenesis`。
+
+标准化剖面以拟合锋心为 `0 km`，冷侧为负、暖湿侧为正。程序比较剖面外侧两个采样点的 θe 中位数；端点差小于 `0.5 K` 时不强行判断方向，并在对应面板标注 `orientation unresolved`。
+
+动力图只使用 manifest 声明的 `data/raw/era5/201706.nc` 中同一时次、同一层次的 `u / v / q / t / r`，不会把 ERA5 风场与 CRA40 热力场混算。符号约定如下：
+
+- 散度小于零表示辐合；
+- 水汽通量辐合大于零表示水汽汇聚；
+- 运动学锋生函数大于零表示锋生、小于零表示锋消。
+
+`diagnostics.components` 会分别记录 `base / signed_sections / era5_dynamics`。显式请求的 ERA5 动力输入缺失或无效时，基础图仍保留，但总状态变为 `partial`，具体原因写入 `diagnostics.warnings`。
+
+### 6.4 哪些结果目前仍主要参考 legacy 输出
 
 如果你现在需要直接对照旧工程成果，仍建议参考：
 
@@ -500,15 +536,15 @@ outputs/
 - 旧工程跑通基线文档：[legacy_project_smoke_status_2026-07-05.md](/H:/邢台观测站/CWR_project/meiyu_new/docs/legacy_project_smoke_status_2026-07-05.md)
 - 分层设计文档：[2026-07-05-layered-pipeline-design.md](/H:/邢台观测站/CWR_project/meiyu_new/docs/2026-07-05-layered-pipeline-design.md)
 
-### 6.4 这份 guide 用完之后，下一步看什么
+### 6.5 这份 guide 用完之后，下一步看什么
 
 如果你的目标是：
 
 - 先把当前最小链路跑通：继续按本指南执行即可
 - 理解新模块之间的边界和设计关系：下一步看“技术架构与旧工程映射”文档
-- 把其他时次、其他变量、其他锋面接进来：优先仿照本指南的最小案例扩展，不建议一开始就改 `runner` 做全自动总控
+- 把其他时次、其他变量、其他锋面接进来：优先仿照已有 manifest 扩展；如果现有 step 语义不足，再补模块和测试
 
 ## 7. 一句话总结
 
-当前这版新流水线已经适合做“项目内、真实数据、按步骤复用”的研究入口。最稳妥的使用方式，是先围绕 `CRA40 front2 2017-06-22T18` 跑通 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics`，确认你理解了每一步输入输出，再逐步扩展到 `front1 V1` 和更多个例。
+当前这版新流水线已经适合做“项目内、真实数据、manifest 驱动”的自动化研究入口。最稳妥的使用方式，是先围绕 `CRA40 front2 2017-06-22T18` 跑通 `mask -> geometry -> profiles -> subareas -> statistics -> diagnostics`，确认输出和摘要结构，再使用已有 manifest 扩展到 front1、ERA5、多变量和批量案例。
 

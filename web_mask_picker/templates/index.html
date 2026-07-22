@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>梅雨锋区域掩码选取</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header><strong>梅雨锋区域掩码选取</strong><span>导入 CRA40 诊断量 · 选取格点 · 导出 NC</span></header>
+  <main>
+    <aside>
+      <label>导入方式 <select id="import-mode"><option value="single">单文件</option><option value="batch">批量（选择文件夹）</option></select></label>
+      <label id="single-file-wrap" class="file">导入诊断结果 NetCDF <input id="file" type="file" accept=".nc,.nc4,.cdf"></label>
+      <label id="batch-file-wrap" class="file" hidden>选择含 NC 的文件夹 <input id="batch-files" type="file" accept=".nc,.nc4,.cdf" multiple webkitdirectory></label>
+      <div id="batch-controls" class="buttons" hidden><button id="previous-file" disabled>上一个 NC</button><button id="next-file" disabled>下一个 NC</button></div>
+      <p id="batch-status" hidden></p>
+      <p id="file-status">尚未导入数据</p>
+      <label>显示变量 <select id="variable" disabled></select></label>
+      <div id="selectors"></div>
+      <label>色标 <select id="cmap"><option value="YlOrRd">YlOrRd（熵位温梯度）</option><option value="RdBu_r">RdBu_r（冷平流等正负量）</option><option value="PuOr_r">PuOr_r（锋生等正负量）</option><option value="YlGnBu">YlGnBu（降水类）</option></select></label>
+      <div class="range"><label>最小值 <input id="vmin" type="number" step="any"></label><label>最大值 <input id="vmax" type="number" step="any"></label></div>
+      <label>颜色层级 <select id="levels"><option value="11">11 层</option><option value="21" selected>21 层</option><option value="36">36 层（更多）</option></select></label>
+      <label><input id="domain-box" type="checkbox" checked> 显示范围框（90–135°E，20–50°N）</label>
+      <button id="apply-range" disabled>应用色标范围</button>
+      <hr>
+      <p><b>操作</b></p>
+      <div class="buttons"><button id="mode-point" class="active" disabled>单点选取</button><button id="mode-remove" disabled>单点剔除</button><button id="mode-box" disabled>框选添加</button><button id="mode-lasso" disabled>曲线圈选</button><button id="mode-pan" disabled>拖动画面</button></div>
+      <div class="buttons"><button id="undo" disabled>撤回</button><button id="clear" disabled>清空</button></div>
+      <label>输出文件名 <input id="export-name" type="text" value="front_mask.nc" disabled></label>
+      <button id="export" class="export" disabled>下载 NC 掩码</button>
+      <p id="count">已选取：0 格点</p>
+      <p class="hint">导入二次处理后的二维诊断变量结果。滚轮缩放；按住鼠标右键拖动画面。黑线为格点边界，紫点为已选格点。</p>
+    </aside>
+    <section>
+      <div class="figure-head"><span id="field-title">等待数据</span><span id="cursor"></span></div>
+      <div id="canvas-wrap"><canvas id="map"></canvas></div>
+      <div class="legend"><canvas id="legend" width="260" height="18"></canvas><span id="legend-label"></span></div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722-2"></script>
+</body></html>

@@ -1,7 +1,7 @@
 # Research data and generated outputs
 data/
 outputs/
-
+docs/material/paper
 # Python caches and test artifacts
 __pycache__/
 .pytest_cache/
@@ -23,3 +23,8 @@ __pycache__/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# png, jpg
+*.jpg
+*.png
+*.jpeg

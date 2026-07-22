@@ -55,7 +55,7 @@
 - CRA40 `rh` 使用 `CRA40_RHU_*`，字段名 `r`；ERA5 `rh` 使用 `ERA5_RH_201706.nc`，字段名 `r`
 - 剖面变量当前正式 runner 化范围是 `rh / temp / w`
 - `read-meiyuji-cwr copy plot.ipynb` 不建议随便改
-- `pipeline/runner.py` 当前是受约束的研究入口，不是通用“大总调度器”
+- `pipeline/runner.py` 当前是受支持 manifest 的自动化研究入口，已覆盖 CRA40/ERA5、front1/front2、`rh / temp / w`、diagnostics、CSV 导出和多 manifest 批量运行；它仍不是任意数据、任意变量、任意产物的通用“大总调度器”
 
 ## 5. 当前推荐工作方式
 

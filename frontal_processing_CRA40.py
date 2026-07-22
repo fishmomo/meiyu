@@ -27,7 +27,7 @@ import gc
 gc.collect()
 
 # 
-file_list = sorted(glob(cra40_glob("CRA40*.nc")))
+file_list = sorted(glob(cra40_glob("CRA40*.nc"), recursive=True))
 file_list
 
 # 

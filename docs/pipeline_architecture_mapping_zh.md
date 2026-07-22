@@ -161,16 +161,16 @@ pipeline/
 职责：
 
 - 校验当前配置是否位于已验证支持边界内
-- 串联 `inventory -> masks -> geometry -> profiles -> subareas -> statistics`
-- 返回结构化摘要，而不是承诺完整科研落盘产物
+- 串联 `inventory -> masks -> geometry -> profiles -> subareas -> statistics -> diagnostics`
+- 返回结构化摘要，并为 statistics CSV 与 diagnostics 图件提供自动落盘入口
 - 在第二阶段把基础链与可选分析链分开处理，确保 `inventory / masks / geometry` 必跑
-- 对 `profiles / subareas / statistics` 提供显式 step gating，关闭时要在摘要里标出 `skipped`
+- 对 `profiles / subareas / statistics / diagnostics` 提供显式 step gating，关闭时要在摘要里标出 `skipped`
 
 边界：
 
-- 当前不是通用入口
-- 当前不是多案例批处理器
-- 当前不是诊断图、ERA5、front1、多变量统一总控
+- 当前是受支持 manifest 的统一入口，不是任意数据、任意变量、任意产物的通用总调度器
+- 当前支持多 manifest 批量运行，但不是带依赖编排、失败重试和任务队列的批处理平台
+- 当前已覆盖 CRA40/ERA5、front1/front2、`rh / temp / w` 和三类 diagnostics 图件；超出这些边界的新科学语义仍应先落到 core/steps
 - 当前返回的顶层摘要 key 结构固定不变，步骤是否执行通过 `completed / partial / skipped` 这类状态表达
 
 ## 4. 新模块与旧脚本映射表
@@ -183,8 +183,12 @@ pipeline/
 | `pipeline.steps.profiles` | 沿 section 抽取三维场剖面 bundle | `frontal1_process_w.py`、`frontal1_process_rh.py`、`frontal2_process.py` 中剖面抽样逻辑 | 已迁移并已验证 | 模块接口具备扩展性，但当前统一入口只验证 `rh` |
 | `pipeline.steps.subareas` | 按 section 之间关系筛选子区域 | `frontal1_process_SelectSubArea.py` | 已迁移并已验证 | 已形成独立函数接口和测试，但与 legacy 子区域命名、图件产物尚未完全统一 |
 | `pipeline.steps.statistics` | 掩膜均值与时序均值计算 | `merge_csv.py`、`merge_csv fengmian2.py` 的统计内核 | 已迁移并已验证 | 当前已迁入的是统计计算能力，不是 legacy 全套 CSV/绘图流程 |
-| `pipeline.steps.diagnostics` | 最小研究辅助图件落盘（剖面 overview） | `frontal_info_graphic_identification.py`；`frontal_processing_CRA40.py` 中诊断图部分 | 已迁移并已验证（最小能力） | 当前只实现最小图件集合，不等于完整替代 legacy 全部诊断图 |
-| 通用化 `runner` 总入口 | 跨数据源、跨锋面、跨变量的统一串联 | 多个 legacy 脚本组合关系 | 已部分迁移 | 当前 `runner` 正式支持 `CRA40 front2 2017-06-22T18 rh` 和 `CRA40 front1 2017-06-22T18 rh/temp/w` |
+| `pipeline.core.section_orientation` | 大圆距离、冷暖侧判定和剖面统一翻转 | legacy 剖面中的法线采样坐标 | 已迁移并已验证 | 横轴为距锋心 km；冷侧负、暖侧正，弱 θe 对比显式标为未判定 |
+| `pipeline.core.era5_dynamics` | ERA5 850 hPa θe 梯度、散度、水汽通量辐合和锋生计算 | `frontal_info_graphic_identification.py` 中动力诊断逻辑 | 已迁移并已验证 | 只消费同一 ERA5 文件内共址的 `u/v/q/t/r`，核心量保留物理单位 |
+| `pipeline.steps.diagnostics` | 基础图与 CRA40 legacy-style 研究图落盘 | `frontal_info_graphic_identification.py`；`frontal_processing_CRA40.py` 中诊断图部分 | 已迁移并已验证 | 保留原有 CRA40 产品，不等于完整替代 legacy 连续帧体系 |
+| `pipeline.steps.signed_section_diagnostics` | CRA40/ERA5 冷负暖正的 signed-km 剖面图 | legacy 横跨锋面剖面 | 已迁移并已验证 | RH/T/W 及 RH/W+θe 共五张标准化剖面 |
+| `pipeline.steps.dynamics_diagnostics` | 四张 ERA5 850 hPa 动力图 | legacy 锋生、辐合和风场出图 | 已迁移并已验证 | 图件显式标注时次、层次、单位和正负含义 |
+| 通用化 `runner` 总入口 | 跨数据源、跨锋面、跨变量的统一串联 | 多个 legacy 脚本组合关系 | 已迁移并持续扩展 | 支持 CRA40/ERA5、front1/front2、多时次、多变量、CSV、批量 manifest 与可选动力诊断 |
 
 映射时需要注意两点：
 
@@ -206,7 +210,9 @@ pipeline/
 - `subareas` 的子区域筛选
 - `statistics` 的掩膜均值计算，已支持 front1 多变量逐变量 `front_mean` 与 `subarea_mean`
 - `diagnostics` 的最小图件落盘
-- `runner` 对 `CRA40 front2 2017-06-22T18 rh` 与 `CRA40 front1 2017-06-22T18 rh/temp/w` 的结构化串联
+- CRA40/ERA5 五张冷负暖正的 signed-km 横跨锋面剖面
+- ERA5 850 hPa θe 梯度风场、散度、水汽通量辐合和运动学锋生图
+- `runner` 对 CRA40/ERA5、front1/front2、多时次和 `rh/temp/w` 的结构化串联
 
 当前这些已验证能力在第二阶段里可以被 gating 拆开看，但语义不会变成“能力消失”：
 
@@ -234,10 +240,9 @@ pipeline/
 
 这类能力要么尚未进入 `runner`，要么尚未被证明能在统一入口下稳定工作。
 
-- ERA5 的统一串联入口
-- 更多时次的批量支持（front1/front2 均只验证了 `2017-06-22T18`）
-- diagnostics 的完整图件总调度与批量出图
-- 多案例批处理与批量调度
+- CRA40 动力诊断（当前缺少同源 `u/v/q` 输入）
+- 连续时次锋面追踪、动画和生命周期诊断
+- 跨案例合成、显著性检验与批量科研统计
 - 完整中间文件体系和统一 manifest/落盘规范
 
 这一类能力即使在旧工程里“能跑”，也不能在新流水线文档中写成“已完成迁移”，因为它们还没有进入当前受支持的新总入口边界。
@@ -267,20 +272,14 @@ pipeline/
 
 ### 6.3 扩展 ERA5
 
-建议入口：
-
-- 先在 step 层验证数据读取、坐标对齐、剖面抽样
-- 只有当 ERA5 有独立真实案例基线后，才考虑进入统一入口
-
-原因：
-
-- 旧工程中 ERA5 相关脚本能跑，不等于当前新入口已经具备同等支持
+ERA5 已具备独立真实案例基线，并已接入统一入口。当前动力诊断的固定边界是：manifest 显式声明同一份月文件，按目标时次和 `850 hPa` 选取共址的 `u/v/q/t/r`。后续扩展其他层次或时次时，应继续通过 manifest 参数表达，不在 runner 中硬编码。
 
 ### 6.4 补齐 diagnostics
 
-最小 `diagnostics` 已作为独立 step 落地并纳入 `runner`。后续补齐建议：
+基础图、CRA40 research diagnostics、signed-km 剖面和 ERA5 四类动力图均已纳入 `runner`。后续补齐建议：
 
-- 在现有 `write_front_diagnostics(...)` 基础上逐步增加更多图件类型（连续帧、组合图、热力图等）
+- 增加连续帧、锋面位置追踪和生命周期图
+- 增加动力量沿标准化剖面的合成与定量统计
 - 明确每种图件的输入、输出和与人工识别流程的关系
 - 保持 diagnostics 只消费 step 结果、不反向侵入底层逻辑的原则
 
@@ -345,4 +344,4 @@ pipeline/
 
 ## 8. 一句话结论
 
-当前新流水线已完成 CRA40/ERA5 双源、front1/front2 双锋面、多时次、多变量、三类 diagnostics 图件的完整串联。尚未完成：ERA5 front1 覆盖、批量多案例调度、legacy 产物全面对齐。
+当前新流水线已完成 CRA40/ERA5 双源、front1/front2 双锋面、多时次、多变量、三类 diagnostics 图件、CSV 导出和多 manifest 批量运行的完整串联。尚未完成的是更大范围 ERA5 时次覆盖、更丰富的诊断图件、统计分析深化，以及 legacy 产物全面对齐。

@@ -1,6 +1,7 @@
 """Pipeline entrypoint."""
 
 import argparse
+from datetime import datetime
 import json
 import sys
 from pathlib import Path
@@ -8,23 +9,31 @@ from typing import Any
 
 import numpy as np
 
-from nc_compat import open_dataset_compat
+from nc_compat import open_dataset_compat, stage_input_path
 from pipeline.core.cra40_fields import read_cra40_profile_cube
 from pipeline.core.cra40_fields import resolve_cra40_profile_input
 from pipeline.core.era5_fields import read_era5_profile_cube
 from pipeline.core.era5_fields import resolve_era5_profile_input
+from pipeline.core.era5_dynamics import calculate_era5_dynamics
+from pipeline.core.era5_dynamics import read_era5_dynamics
 from pipeline.core.paths import ensure_case_dirs
 from pipeline.manifest_loader import build_runtime_config
 from pipeline.steps.geometry import build_geometry_from_mask
 from pipeline.steps.inventory import build_inventory_report
 from pipeline.steps.masks import resolve_case_masks
 from pipeline.steps.profiles import build_profile_bundle_from_field
+from pipeline.steps.diagnostics import write_cra40_research_diagnostics
 from pipeline.steps.diagnostics import write_front_diagnostics
 from pipeline.steps.diagnostics import write_geometry_diagnostics
 from pipeline.steps.diagnostics import write_statistics_diagnostics
+from pipeline.steps.dynamics_diagnostics import write_era5_dynamics_diagnostics
+from pipeline.steps.signed_section_diagnostics import (
+    write_signed_section_diagnostics,
+)
 from pipeline.steps.statistics import build_masked_mean
 from pipeline.steps.statistics import write_statistics_csv
 from pipeline.steps.subareas import build_subarea_mask
+from project_paths import cra40_file
 
 
 def _validate_supported_case(cfg) -> None:
@@ -107,6 +116,32 @@ def _get_subarea_sections(cfg: Any) -> tuple[int, int]:
         int(getattr(subareas, "start_section", 1)),
         int(getattr(subareas, "end_section", 4)),
     )
+
+
+def _read_cra40_precip_field(
+    target_time: str,
+    lats: np.ndarray,
+    lons: np.ndarray,
+) -> np.ndarray | None:
+    token = datetime.strptime(target_time, "%Y-%m-%dT%H").strftime("%Y%m%d%H")
+    path = Path(cra40_file(f"CRA40LAND_PRECIP_{token}_GLB_0P25_HOUR_V1_0_0.grib"))
+    if not path.exists():
+        return None
+
+    try:
+        import pygrib
+
+        with pygrib.open(stage_input_path(path)) as grbs:
+            grb = grbs[1]
+            precip = np.asarray(grb.values, dtype=float) * 3600 * 6
+    except Exception:
+        return None
+
+    lon_grid = np.linspace(0.125, 359.875, precip.shape[1])
+    lat_grid = np.linspace(89.875, -89.875, precip.shape[0])
+    lon_indices = [int(np.argmin(np.abs(lon_grid - lon))) for lon in lons]
+    lat_indices = [int(np.argmin(np.abs(lat_grid - lat))) for lat in lats]
+    return precip[np.ix_(lat_indices, lon_indices)]
 
 
 def _is_step_enabled(cfg: Any, step_name: str) -> bool:
@@ -268,6 +303,10 @@ def run_case(cfg) -> dict[str, object]:
                     lats,
                     lons,
                 )
+        if cfg.dataset == "cra40":
+            precip = _read_cra40_precip_field(cfg.target_time, lats, lons)
+            if precip is not None:
+                field_cache["precip"] = (precip, np.array([], dtype=float))
 
     profile_bundle_cache: dict[str, object] = {}
     if profiles_enabled:
@@ -344,6 +383,12 @@ def run_case(cfg) -> dict[str, object]:
     diagnostics_enabled = _is_step_enabled(cfg, "diagnostics")
     if diagnostics_enabled:
         figure_paths: list[str] = []
+        components = {
+            "base": "completed",
+            "signed_sections": "not_applicable",
+            "era5_dynamics": "skipped",
+        }
+        warnings: list[str] = []
         figure_paths += write_geometry_diagnostics(
             cfg.case_name,
             output_dirs["diagnostics"],
@@ -360,6 +405,70 @@ def run_case(cfg) -> dict[str, object]:
                 profile_bundle_cache,
                 statistics_summary,
             )
+            if {"rh", "temp"}.issubset(set(profile_variables)):
+                try:
+                    signed_paths, signed_metadata = write_signed_section_diagnostics(
+                        cfg.case_name,
+                        output_dirs["diagnostics"],
+                        geometry,
+                        profile_bundle_cache,
+                    )
+                    figure_paths += signed_paths
+                    signed_status = str(signed_metadata.get("status", "failed"))
+                    if signed_status == "completed":
+                        components["signed_sections"] = "completed"
+                    else:
+                        components["signed_sections"] = "failed"
+                        warnings.append(
+                            "Signed sections skipped: "
+                            + str(signed_metadata.get("reason", "unknown reason"))
+                        )
+                except (KeyError, ValueError) as exc:
+                    components["signed_sections"] = "failed"
+                    warnings.append(f"Signed sections skipped: {exc}")
+        if cfg.dataset == "cra40":
+            figure_paths += write_cra40_research_diagnostics(
+                cfg.case_name,
+                output_dirs["diagnostics"],
+                geometry,
+                mask_bool,
+                lons,
+                lats,
+                submask if subareas_enabled else None,
+                profile_bundle_cache,
+                field_cache,
+            )
+        resolved_inputs = getattr(cfg, "resolved_inputs", {}) or {}
+        dynamics_input = resolved_inputs.get("dynamics")
+        if cfg.dataset == "era5" and dynamics_input:
+            diagnostics_params = getattr(cfg, "diagnostics", None)
+            level_hpa = float(
+                getattr(diagnostics_params, "level_hpa", 850.0)
+            )
+            try:
+                dynamics_data = read_era5_dynamics(
+                    Path(dynamics_input),
+                    cfg.target_time,
+                    level_hpa,
+                    lats,
+                    lons,
+                )
+                dynamics_result = calculate_era5_dynamics(
+                    dynamics_data,
+                    level_hpa,
+                )
+                figure_paths += write_era5_dynamics_diagnostics(
+                    cfg.case_name,
+                    cfg.target_time,
+                    level_hpa,
+                    output_dirs["diagnostics"],
+                    mask_bool,
+                    dynamics_result,
+                )
+                components["era5_dynamics"] = "completed"
+            except (FileNotFoundError, KeyError, OSError, ValueError) as exc:
+                components["era5_dynamics"] = "failed"
+                warnings.append(f"ERA5 dynamics skipped: {exc}")
         figure_paths += write_statistics_diagnostics(
             cfg.case_name,
             output_dirs["diagnostics"],
@@ -367,7 +476,13 @@ def run_case(cfg) -> dict[str, object]:
         )
         if csv_path:
             figure_paths.append(csv_path)
-        diagnostics_summary = {"enabled": True, "status": "completed", "files": figure_paths}
+        diagnostics_summary = {
+            "enabled": True,
+            "status": "partial" if "failed" in components.values() else "completed",
+            "files": figure_paths,
+            "components": components,
+            "warnings": warnings,
+        }
     else:
         diagnostics_summary = _skipped_summary()
 

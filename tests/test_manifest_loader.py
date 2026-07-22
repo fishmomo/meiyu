@@ -26,6 +26,25 @@ def test_load_manifest_reads_verified_case_defaults():
     )
 
 
+def test_era5_dynamics_manifest_declares_level_and_input():
+    cfg = build_runtime_config(
+        Path("manifests/cases/era5_front2_20170628T18.yml")
+    )
+
+    assert cfg.diagnostics.level_hpa == 850.0
+    assert cfg.resolved_inputs["dynamics"].endswith(
+        "data\\raw\\era5\\201706.nc"
+    )
+
+
+def test_manifest_without_diagnostics_params_defaults_to_850():
+    cfg = build_runtime_config(
+        Path("manifests/cases/cra40_front2_20170622T18.yml")
+    )
+
+    assert cfg.diagnostics.level_hpa == 850.0
+
+
 def test_build_runtime_config_allows_known_overrides():
     cfg = build_runtime_config(
         Path("manifests/cases/cra40_front2_20170622T18.yml"),
